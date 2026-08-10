@@ -27,42 +27,182 @@ body {
 
 .page {
   padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1280px;
+  margin: 0 auto;
 }
 
-.twitch-embed-section {
+.pageHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pageLabel {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 0;
+}
+
+.page h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 2.5vw, 2.5rem);
+}
+
+.statusBanner {
+  padding: 1rem;
+  border-radius: 12px;
+  background: #fff4f4;
+  color: #912929;
+  border: 1px solid #f5c2c2;
+}
+
+.twitch-viewer-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.viewerMain {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.embed-player,
-.embed-chat {
+.viewerHeader {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.profileSummary {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.profileAvatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 9999px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f3f3f3;
+}
+
+.avatarImage {
+  object-fit: cover;
+}
+
+.displayName {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.loginName {
+  margin: 0.25rem 0 0;
+  color: #666;
+}
+
+.streamStatus {
+  margin-left: auto;
+}
+
+.streamStatus span {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: 9999px;
+  background: #e7f5ff;
+  color: #055160;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.profileDescription {
+  margin: 0;
+  color: #444;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.playerWrapper {
   width: 100%;
-  min-height: 320px;
-}
-
-.embed-player {
   aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
 }
 
-.embed-player iframe,
-.embed-chat iframe {
+.playerWrapper iframe {
   width: 100%;
   height: 100%;
 }
 
-@media (min-width: 768px) {
-  .twitch-embed-section {
-    flex-direction: row;
-    align-items: stretch;
+.streamInfoSection {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.streamInfoSection h2 {
+  margin-top: 0;
+}
+
+.chatPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.chatHeader {
+  padding: 0.75rem 1rem;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+  font-weight: 700;
+}
+
+.chatWrapper {
+  width: 100%;
+  min-height: 420px;
+  max-width: 400px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.chatWrapper iframe {
+  width: 100%;
+  height: 100%;
+}
+
+@media (min-width: 992px) {
+  .twitch-viewer-layout {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
   }
 
-  .embed-player {
-    flex: 1 1 60%;
+  .viewerMain {
+    gap: 1.5rem;
   }
 
-  .embed-chat {
-    flex: 1 1 40%;
-    min-height: auto;
+  .chatPanel {
+    position: sticky;
+    top: 1rem;
+    align-self: start;
+  }
+}
+
+@media (max-width: 767px) {
+  .streamStatus {
+    margin-left: 0;
   }
 }
