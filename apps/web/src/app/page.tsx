@@ -22,6 +22,8 @@ type TwitchPageData = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const TWITCH_CHANNEL = 'inumamiya';
+const TWITCH_PARENT_HOST = process.env.NEXT_PUBLIC_TWITCH_PARENT_HOST ?? 'localhost';
 
 async function fetchTwitchData(login: string): Promise<TwitchPageData> {
   const userRequest = fetch(`${API_BASE_URL}/twitch/users/${login}`, {
@@ -91,8 +93,15 @@ export default async function Home() {
     <p>配信情報を読み込めませんでした。</p>
   );
 
+  const playerSrc = `https://player.twitch.tv/?channel=${encodeURIComponent(
+    TWITCH_CHANNEL,
+  )}&parent=${encodeURIComponent(TWITCH_PARENT_HOST)}&autoplay=false`;
+  const chatSrc = `https://www.twitch.tv/embed/${encodeURIComponent(
+    TWITCH_CHANNEL,
+  )}/chat?parent=${encodeURIComponent(TWITCH_PARENT_HOST)}`;
+
   return (
-    <main>
+    <main className="page">
       <h1>配信者専用視聴ページ</h1>
 
       {errorMessage ? (
@@ -131,6 +140,30 @@ export default async function Home() {
       <section>
         <h2>配信状況</h2>
         {streamSection}
+      </section>
+
+      <section className="twitch-embed-section">
+        <div className="embed-player">
+          <iframe
+            src={playerSrc}
+            height="100%"
+            width="100%"
+            allowFullScreen
+            frameBorder="0"
+            scrolling="no"
+            title="Twitch Player"
+          />
+        </div>
+        <div className="embed-chat">
+          <iframe
+            src={chatSrc}
+            height="100%"
+            width="100%"
+            frameBorder="0"
+            scrolling="no"
+            title="Twitch Chat"
+          />
+        </div>
       </section>
     </main>
   );
