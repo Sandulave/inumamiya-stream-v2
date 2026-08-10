@@ -7,6 +7,9 @@ describe('TwitchController', () => {
 
   const twitchServiceMock = {
     getAppAccessToken: jest.fn(),
+    getUserByLogin: jest.fn(),
+    getStreamByLogin: jest.fn(),
+    getClipsByLogin: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -25,5 +28,15 @@ describe('TwitchController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('should return clips from the Twitch service', async () => {
+    const clips = [{ id: 'clip1', url: 'https://clips.twitch.tv/clip1' }];
+    twitchServiceMock.getClipsByLogin.mockResolvedValue(clips);
+
+    const result = await controller.getClips('inumamiya');
+
+    expect(result).toEqual({ clips });
+    expect(twitchServiceMock.getClipsByLogin).toHaveBeenCalledWith('inumamiya');
   });
 });

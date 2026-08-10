@@ -34,4 +34,13 @@ export class TwitchController {
       stream,
     };
   }
+
+  @Get('clips/:login')
+  async getClips(@Param('login') login: string) {
+    const clips = await this.twitchService.getClipsByLogin(login);
+
+    return {
+      clips,
+    };
+  }
 }

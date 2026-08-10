@@ -17,6 +17,17 @@ type TwitchStreamResponse = {
   } | null;
 };
 
+type TwitchClip = {
+  id: string;
+  url: string;
+  embed_url: string;
+  creator_name: string;
+  title: string;
+  thumbnail_url: string;
+  view_count: number;
+  created_at: string;
+};
+
 type TwitchPageData = {
   user: TwitchUser | null;
   stream: TwitchStreamResponse | null;
@@ -71,8 +82,29 @@ async function fetchTwitchData(login: string): Promise<TwitchPageData> {
   return { user, stream, errorMessage };
 }
 
+async function fetchTwitchClips(login: string): Promise<TwitchClip[] | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/twitch/clips/${login}`, {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+
+    return data.clips as TwitchClip[];
+  } catch {
+    return null;
+  }
+}
+
 export default async function Home() {
-  const { user, stream, errorMessage } = await fetchTwitchData('inumamiya');
+  const [{ user, stream, errorMessage }, clips] = await Promise.all([
+    fetchTwitchData('inumamiya'),
+    fetchTwitchClips('inumamiya'),
+  ]);
 
   const streamSection = stream ? (
     stream.isLive && stream.stream ? (
@@ -164,6 +196,44 @@ export default async function Home() {
           <section className="streamInfoSection">
             <h2>配信状況</h2>
             {streamSection}
+          </section>
+
+          <section className="clipSection">
+            <div className="clipSectionHeader">
+              <h2>最新クリップ</h2>
+              <p>{clips ? `最新 ${clips.length} 件` : 'クリップ情報を読み込めませんでした'}</p>
+            </div>
+            {clips ? (
+              <div className="clipGrid">
+                {clips.map((clip) => (
+                  <a
+                    key={clip.id}
+                    href={clip.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="clipCard"
+                  >
+                    <div className="clipThumbnail">
+                      <Image
+                        src={clip.thumbnail_url}
+                        alt={clip.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 240px"
+                        style={{ objectFit: 'cover' }}
+                      />
+                    </div>
+                    <div className="clipInfo">
+                      <p className="clipTitle">{clip.title}</p>
+                      <p className="clipMeta">
+                        {clip.creator_name} ・ {clip.view_count} 視聴
+                      </p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p>クリップの取得に失敗しました。</p>
+            )}
           </section>
         </div>
 

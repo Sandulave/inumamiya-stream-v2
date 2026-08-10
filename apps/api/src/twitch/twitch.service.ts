@@ -43,6 +43,27 @@ type TwitchStreamsResponse = {
   data: TwitchStream[];
 };
 
+type TwitchClip = {
+  id: string;
+  url: string;
+  embed_url: string;
+  broadcaster_id: string;
+  broadcaster_name: string;
+  creator_id: string;
+  creator_name: string;
+  video_id: string;
+  game_id: string;
+  language: string;
+  title: string;
+  view_count: number;
+  created_at: string;
+  thumbnail_url: string;
+};
+
+type TwitchClipsResponse = {
+  data: TwitchClip[];
+};
+
 @Injectable()
 export class TwitchService {
   constructor(private readonly configService: ConfigService) {}
@@ -141,5 +162,44 @@ export class TwitchService {
     const data = (await response.json()) as TwitchStreamsResponse;
 
     return data.data[0] ?? null;
+  }
+
+  async getClipsByLogin(login: string, limit = 6): Promise<TwitchClip[]> {
+    const user = await this.getUserByLogin(login);
+
+    if (!user) {
+      throw new Error('Twitchユーザーが見つかりません');
+    }
+
+    const clientId = this.configService.get<string>('TWITCH_CLIENT_ID');
+
+    if (!clientId) {
+      throw new Error('Twitch Client ID が未設定です');
+    }
+
+    const accessToken = await this.getAppAccessToken();
+
+    const params = new URLSearchParams({
+      broadcaster_id: user.id,
+      first: String(limit),
+    });
+
+    const response = await fetch(
+      `https://api.twitch.tv/helix/clips?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Client-Id': clientId,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Twitch clips request failed: ${response.status}`);
+    }
+
+    const data = (await response.json()) as TwitchClipsResponse;
+
+    return data.data;
   }
 }
