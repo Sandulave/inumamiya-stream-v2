@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
 import { TwitchService } from './twitch.service';
 
 @Controller('twitch')
@@ -12,5 +12,16 @@ export class TwitchController {
     return {
       authenticated: true,
     };
+  }
+
+  @Get('users/:login')
+  async getUser(@Param('login') login: string) {
+    const user = await this.twitchService.getUserByLogin(login);
+
+    if (!user) {
+      throw new NotFoundException('Twitchユーザーが見つかりません');
+    }
+
+    return user;
   }
 }

@@ -7,6 +7,21 @@ type TwitchTokenResponse = {
   token_type: string;
 };
 
+type TwitchUser = {
+  id: string;
+  login: string;
+  display_name: string;
+  broadcaster_type: string;
+  description: string;
+  profile_image_url: string;
+  offline_image_url: string;
+  created_at: string;
+};
+
+type TwitchUsersResponse = {
+  data: TwitchUser[];
+};
+
 @Injectable()
 export class TwitchService {
   constructor(private readonly configService: ConfigService) {}
@@ -41,5 +56,37 @@ export class TwitchService {
     const data = (await response.json()) as TwitchTokenResponse;
 
     return data.access_token;
+  }
+
+  async getUserByLogin(login: string): Promise<TwitchUser | null> {
+    const clientId = this.configService.get<string>('TWITCH_CLIENT_ID');
+
+    if (!clientId) {
+      throw new Error('Twitch Client ID が未設定です');
+    }
+
+    const accessToken = await this.getAppAccessToken();
+
+    const params = new URLSearchParams({
+      login,
+    });
+
+    const response = await fetch(
+      `https://api.twitch.tv/helix/users?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Client-Id': clientId,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Twitch user request failed: ${response.status}`);
+    }
+
+    const data = (await response.json()) as TwitchUsersResponse;
+
+    return data.data[0] ?? null;
   }
 }
