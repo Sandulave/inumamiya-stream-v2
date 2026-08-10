@@ -35,6 +35,23 @@ type TwitchClip = {
   created_at: string;
 };
 
+type TwitchVideo = {
+  id: string;
+  stream_id: string;
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  title: string;
+  description: string;
+  created_at: string;
+  published_at: string;
+  url: string;
+  thumbnail_url: string;
+  view_count: number;
+  type: string;
+  duration: string;
+};
+
 type TwitchPageData = {
   user: TwitchUser | null;
   stream: TwitchStreamResponse | null;
@@ -107,6 +124,54 @@ async function fetchTwitchClips(login: string): Promise<TwitchClip[] | null> {
   }
 }
 
+async function fetchTwitchVideos(login: string): Promise<TwitchVideo[] | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/twitch/videos/${login}`, {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+
+    return data.videos as TwitchVideo[];
+  } catch {
+    return null;
+  }
+}
+
+function formatVideoThumbnail(url: string) {
+  return url.replace('%{width}', '320').replace('%{height}', '180');
+}
+
+function formatVideoDate(isoString: string) {
+  const date = new Date(isoString);
+  return new Intl.DateTimeFormat('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Tokyo',
+  }).format(date);
+}
+
+function formatDuration(duration: string) {
+  const hoursMatch = duration.match(/(\d+)h/);
+  const minutesMatch = duration.match(/(\d+)m/);
+  const hours = hoursMatch ? Number(hoursMatch[1]) : 0;
+  const minutes = minutesMatch ? Number(minutesMatch[1]) : 0;
+
+  if (hours > 0) {
+    return `${hours}時間${minutes}分`;
+  }
+
+  return `${minutes}分`;
+}
+
 function SiteOverviewSection() {
   return (
     <section className="siteOverviewSection">
@@ -153,6 +218,67 @@ function ExternalLinksSection() {
   );
 }
 
+function QrCardSection() {
+  const qrLinks = [
+    {
+      name: 'Discord',
+      url: 'https://discord.gg/CcRNgETs7W',
+      description: 'ファンコミュニティ',
+    },
+    {
+      name: 'YouTube',
+      url: 'https://www.youtube.com/channel/UC3K67dwtrnZFI_dVn5LYWGA',
+      description: '公式YouTubeチャンネル',
+    },
+    {
+      name: 'どもども動画',
+      url: 'https://www.youtube.com/channel/UCeaXl91nkdPp6isMzI548vg',
+      description: 'どもども動画チャンネル',
+    },
+    {
+      name: 'LINE OPENCHAT',
+      url: 'https://line.me/ti/g2/nbHvs4pt-v_8nhwuRxD_o_0CEAM1L1HiFBfpzqA?utm_source=invitation&utm_medium=link_copy&utm_campaign=default',
+      description: 'オープンチャット',
+    },
+  ];
+
+  return (
+    <section className="qrSection">
+      <div className="sectionHeader">
+        <h2>QRコードリンク</h2>
+        <p>スマホからもアクセスしやすいQRカードです。</p>
+      </div>
+      <div className="qrGrid">
+        {qrLinks.map((link) => (
+          <a
+            key={link.name}
+            href={link.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="qrCard"
+          >
+            <div className="qrImageWrapper">
+              <Image
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                  link.url,
+                )}`}
+                alt={`${link.name} QRコード`}
+                fill
+                sizes="180px"
+                style={{ objectFit: 'contain' }}
+              />
+            </div>
+            <div>
+              <p className="qrCardTitle">{link.name}</p>
+              <p className="qrCardDescription">{link.description}</p>
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function GamesSection() {
   return (
     <section className="gameSection">
@@ -188,24 +314,70 @@ function ProfileGallerySection() {
     <section className="gallerySection">
       <div className="sectionHeader">
         <h2>プロフィールギャラリー</h2>
-        <p>旧サイトにあったプロフィール画像をコンパクトに表示します。</p>
+        <p>旧サイトの流れる横スクロールギャラリーです。ホバーで停止します。</p>
       </div>
-      <div className="galleryGrid">
-        {profileGallery.map((image) => (
-          <div key={image.src} className="galleryImageCard">
-            <div className="galleryImageWrapper">
-              <Image
-                src={image.src}
-                alt={image.alt}
-                fill
-                sizes="(max-width: 768px) 100vw, 180px"
-                style={{ objectFit: 'cover' }}
-              />
+      <div className="galleryMarqueeWrapper">
+        <div className="galleryMarquee">
+          {profileGallery.concat(profileGallery).map((image, index) => (
+            <div key={`${image.src}-${index}`} className="galleryMarqueeItem">
+              <div className="galleryImageWrapper">
+                <Image
+                  src={image.src}
+                  alt={image.alt}
+                  fill
+                  sizes="(max-width: 768px) 180px, 180px"
+                  style={{ objectFit: 'cover' }}
+                />
+              </div>
+              <p className="galleryImageLabel">{image.alt}</p>
             </div>
-            <p className="galleryImageLabel">{image.alt}</p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
+    </section>
+  );
+}
+
+function ArchiveSection({ videos }: { videos: TwitchVideo[] | null }) {
+  return (
+    <section className="archiveSection">
+      <div className="sectionHeader">
+        <h2>最近の配信アーカイブ</h2>
+        <p>最新6件のアーカイブを表示します。</p>
+      </div>
+      {videos === null ? (
+        <p>アーカイブを取得できませんでした。</p>
+      ) : videos.length === 0 ? (
+        <p>現在表示できるアーカイブはありません。</p>
+      ) : (
+        <div className="archiveGrid">
+          {videos.map((video) => (
+            <a
+              key={video.id}
+              href={video.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="archiveCard"
+            >
+              <div className="clipThumbnail">
+                <Image
+                  src={formatVideoThumbnail(video.thumbnail_url)}
+                  alt={video.title}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 320px"
+                  style={{ objectFit: 'cover' }}
+                />
+              </div>
+              <div className="clipInfo">
+                <p className="clipTitle">{video.title}</p>
+                <p className="clipMeta">公開: {formatVideoDate(video.published_at)}</p>
+                <p className="clipMeta">長さ: {formatDuration(video.duration)}</p>
+                <p className="clipMeta">再生数: {video.view_count} 回</p>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -234,9 +406,10 @@ function PcSpecSection() {
 }
 
 export default async function Home() {
-  const [{ user, stream, errorMessage }, clips] = await Promise.all([
+  const [{ user, stream, errorMessage }, clips, videos] = await Promise.all([
     fetchTwitchData('inumamiya'),
     fetchTwitchClips('inumamiya'),
+    fetchTwitchVideos('inumamiya'),
   ]);
 
   const streamSection = stream ? (
@@ -254,7 +427,7 @@ export default async function Home() {
         </p>
       </div>
     ) : (
-      <p>オフライン</p>
+      <p>現在配信していません。</p>
     )
   ) : (
     <p>配信情報を読み込めませんでした。</p>
@@ -286,24 +459,44 @@ export default async function Home() {
         <div className="viewerMain">
           <div className="viewerHeader">
             {user ? (
-              <div className="profileSummary">
-                <div className="profileAvatar">
-                  <Image
-                    src={user.profile_image_url}
-                    alt={`${user.display_name} のプロフィール画像`}
-                    width={80}
-                    height={80}
-                    className="avatarImage"
-                  />
+              <>
+                <div className="profileSummary">
+                  <div className="profileAvatar">
+                    <Image
+                      src={user.profile_image_url}
+                      alt={`${user.display_name} のプロフィール画像`}
+                      width={80}
+                      height={80}
+                      className="avatarImage"
+                    />
+                  </div>
+                  <div>
+                    <p className="displayName">{user.display_name}</p>
+                    <p className="loginName">@{user.login}</p>
+                  </div>
+                  <div className="streamStatus">
+                    <span>{stream?.isLive ? '配信中' : 'オフライン'}</span>
+                  </div>
                 </div>
-                <div>
-                  <p className="displayName">{user.display_name}</p>
-                  <p className="loginName">@{user.login}</p>
+                <div className="profileActions">
+                  <a
+                    href={`https://www.twitch.tv/${user.login}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="secondaryButton"
+                  >
+                    Twitchで見る
+                  </a>
+                  <a
+                    href={`https://www.twitch.tv/subscribe/${user.login}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="subscribeButton"
+                  >
+                    サブスクする
+                  </a>
                 </div>
-                <div className="streamStatus">
-                  <span>{stream?.isLive ? '配信中' : 'オフライン'}</span>
-                </div>
-              </div>
+              </>
             ) : (
               <div className="profileSummary">
                 <p>プロフィール情報を読み込めませんでした。</p>
@@ -371,6 +564,8 @@ export default async function Home() {
           </section>
 
           <ExternalLinksSection />
+          <ArchiveSection videos={videos} />
+          <QrCardSection />
           <GamesSection />
           <ProfileGallerySection />
           <PcSpecSection />

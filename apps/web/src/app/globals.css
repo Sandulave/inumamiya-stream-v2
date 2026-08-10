@@ -1,32 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: #070a18;
+  --foreground: #eef2ff;
+  --surface: rgba(12, 18, 45, 0.92);
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --muted: #c3c9f2;
+  --accent: #7b57ff;
+  --accent-soft: rgba(123, 87, 255, 0.15);
+  --accent-strong: #c1b8ff;
 }
 
 body {
-  background: var(--background);
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top left, rgba(122, 63, 255, 0.16), transparent 22%),
+    radial-gradient(circle at bottom right, rgba(34, 154, 255, 0.1), transparent 25%),
+    var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
 .page {
-  padding: 1rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -41,22 +37,25 @@ body {
 }
 
 .pageLabel {
-  font-size: 0.9rem;
-  color: #666;
+  font-size: 0.95rem;
+  color: var(--muted);
   margin: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .page h1 {
   margin: 0;
-  font-size: clamp(1.75rem, 2.5vw, 2.5rem);
+  font-size: clamp(2rem, 3vw, 3rem);
+  letter-spacing: -0.04em;
 }
 
 .statusBanner {
   padding: 1rem;
-  border-radius: 12px;
-  background: #fff4f4;
-  color: #912929;
-  border: 1px solid #f5c2c2;
+  border-radius: 16px;
+  background: rgba(180, 35, 45, 0.14);
+  color: #ffd8d8;
+  border: 1px solid rgba(180, 35, 45, 0.28);
 }
 
 .twitch-viewer-layout {
@@ -71,29 +70,43 @@ body {
   gap: 1rem;
 }
 
+.viewerHeader,
+.streamInfoSection,
+.clipSection,
+.archiveSection,
+.siteOverviewSection,
+.linkSection,
+.qrSection,
+.gameSection,
+.gallerySection,
+.pcSpecSection,
+.chatWrapper {
+  border-radius: 24px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+}
+
 .viewerHeader {
   display: grid;
-  gap: 0.75rem;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.9);
+  gap: 1rem;
+  padding: 1.3rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .profileSummary {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 1rem;
   flex-wrap: wrap;
 }
 
 .profileAvatar {
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 9999px;
   overflow: hidden;
   flex-shrink: 0;
-  background: #f3f3f3;
+  background: #111a35;
 }
 
 .avatarImage {
@@ -101,14 +114,14 @@ body {
 }
 
 .displayName {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.2rem;
+  font-weight: 800;
   margin: 0;
 }
 
 .loginName {
-  margin: 0.25rem 0 0;
-  color: #666;
+  margin: 0.3rem 0 0;
+  color: var(--muted);
 }
 
 .streamStatus {
@@ -116,28 +129,65 @@ body {
 }
 
 .streamStatus span {
-  display: inline-block;
-  padding: 0.4rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 0.95rem;
   border-radius: 9999px;
-  background: #e7f5ff;
-  color: #055160;
-  font-size: 0.9rem;
-  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .profileDescription {
   margin: 0;
-  color: #444;
-  font-size: 0.95rem;
-  line-height: 1.6;
+  color: #d8dbff;
+  font-size: 0.98rem;
+  line-height: 1.8;
+}
+
+.profileActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.secondaryButton,
+.subscribeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.95rem 1.4rem;
+  border-radius: 9999px;
+  font-weight: 700;
+  text-decoration: none;
+  min-width: 170px;
+}
+
+.secondaryButton {
+  color: #a9c9ff;
+  background: rgba(92, 120, 255, 0.12);
+  border: 1px solid rgba(92, 120, 255, 0.2);
+}
+
+.subscribeButton {
+  color: #fff;
+  background: linear-gradient(135deg, #9d68ff 0%, #5467ff 100%);
+  box-shadow: 0 16px 38px rgba(84, 103, 255, 0.25);
+}
+
+.secondaryButton:hover,
+.subscribeButton:hover {
+  opacity: 0.94;
 }
 
 .playerWrapper {
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 16px;
+  border-radius: 24px;
   overflow: hidden;
-  background: #000;
+  background: #050715;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .playerWrapper iframe {
@@ -145,22 +195,39 @@ body {
   height: 100%;
 }
 
-.streamInfoSection {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.9);
+.streamInfoSection,
+.clipSection,
+.siteOverviewSection,
+.linkSection,
+.qrSection,
+.gameSection,
+.gallerySection,
+.pcSpecSection {
+  padding: 1.15rem;
 }
 
-.streamInfoSection h2 {
-  margin-top: 0;
+.streamInfoSection h2,
+.clipSection h2,
+.siteOverviewSection h2,
+.linkSection h2,
+.qrSection h2,
+.gameSection h2,
+.gallerySection h2,
+.pcSpecSection h2 {
+  margin: 0 0 0.75rem;
+  color: #f3f6ff;
 }
 
-.clipSection {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.9);
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .clipSectionHeader {
@@ -171,103 +238,229 @@ body {
   margin-bottom: 1rem;
 }
 
-.clipSectionHeader h2 {
-  margin: 0;
-}
-
-.clipGrid {
+.clipGrid,
+.gameGrid,
+.linkGrid,
+.qrGrid,
+.pcSpecGrid,
+.archiveGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
 }
 
-.clipCard {
+.clipGrid,
+.gameGrid,
+.linkGrid,
+.qrGrid,
+.pcSpecGrid,
+.archiveGrid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.clipCard,
+.linkCard,
+.qrCard,
+.gameCard,
+.pcSpecCard,
+.archiveCard {
   display: block;
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(15, 22, 56, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   text-decoration: none;
   color: inherit;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-.clipCard:hover {
+.archiveCard:hover,
+.clipCard:hover,
+.linkCard:hover,
+.qrCard:hover,
+.gameCard:hover,
+.pcSpecCard:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
 }
 
-.clipThumbnail {
+.clipCard:hover,
+.linkCard:hover,
+.qrCard:hover,
+.gameCard:hover,
+.pcSpecCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+}
+
+.clipThumbnail,
+.qrImageWrapper,
+.galleryImageWrapper {
   position: relative;
   width: 100%;
   padding-top: 56.25%;
   overflow: hidden;
-  background: #000;
+  background: #08112d;
 }
 
-.clipThumbnail img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.archiveCard .clipThumbnail {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.clipInfo {
-  padding: 0.85rem;
+.qrImageWrapper {
+  border-radius: 18px;
 }
 
-.clipTitle {
-  margin: 0 0 0.5rem;
-  font-weight: 700;
-  line-height: 1.35;
+.clipInfo,
+.linkCard > div,
+.gameCard > div,
+.pcSpecCard > div {
+  padding: 1rem;
 }
 
-.clipMeta {
+.clipTitle,
+.linkCardTitle,
+.gameCardTitle,
+.pcSpecCardTitle,
+.qrCardTitle {
   margin: 0;
-  color: #666;
+  font-weight: 700;
+  color: #eef4ff;
+}
+
+.clipMeta,
+.linkCardDescription,
+.qrCardDescription,
+.gameCardDescription,
+.pcSpecList li {
+  margin: 0;
+  color: #aab3dd;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.linkExternal {
+  font-size: 1.3rem;
+  color: var(--accent-strong);
+}
+
+.gamePlayButton {
+  align-self: flex-start;
+  padding: 0.9rem 1rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #7d56ff 0%, #4c6aff 100%);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.gameCardLabel {
+  margin: 0;
+  color: #88a5ff;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+}
+
+.gameCardDescription {
+  margin: 0.75rem 0 0;
+}
+
+.gallerySection {
+  padding: 0;
+}
+
+.galleryMarqueeWrapper {
+  overflow: hidden;
+}
+
+.galleryMarquee {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  animation: marqueeScroll 28s linear infinite;
+}
+
+.galleryMarquee:hover {
+  animation-play-state: paused;
+}
+
+.galleryMarqueeItem {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.galleryImageLabel {
+  margin: 0;
+  text-align: center;
+  color: #d6dbff;
+}
+
+@keyframes marqueeScroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galleryMarquee {
+    animation: none;
+  }
+}
+
+.pcSpecGrid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.pcSpecCard {
+  padding: 1rem;
+}
+
+.pcSpecList {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pcSpecList li {
+  color: #c7d0ff;
   font-size: 0.95rem;
 }
 
-.streamInfoSection h2 {
-  margin-top: 0;
+.chatHeader {
+  padding: 0.9rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 20px;
+  color: #f7f8ff;
 }
 
-.streamInfoSection h2 {
-  margin-top: 0;
+.archiveSection {
+  padding: 1.15rem;
 }
 
-.chatPanel {
-  display: flex;
-  flex-direction: column;
+.archiveGrid {
+  display: grid;
   gap: 1rem;
 }
 
-.chatHeader {
-  padding: 0.75rem 1rem;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 16px;
-  font-weight: 700;
+.archiveCard {
+  display: block;
 }
 
 .chatWrapper {
-  width: 100%;
-  min-height: 420px;
   max-width: 400px;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.chatWrapper iframe {
-  width: 100%;
-  height: 100%;
+  background: rgba(7, 11, 25, 0.95);
 }
 
 @media (min-width: 992px) {
   .twitch-viewer-layout {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 360px;
     align-items: start;
   }
 
@@ -294,106 +487,28 @@ body {
   .chatPanel {
     max-width: 100%;
   }
-}
 
-.siteOverviewSection,
-.linkSection,
-.gameSection,
-.gallerySection,
-.pcSpecSection {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.9);
-}
+  .qrGrid,
+  .linkGrid,
+  .gameGrid,
+  .pcSpecGrid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
 
-.siteOverviewSection {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.overviewNote {
-  margin: 0;
-  font-weight: 700;
-}
-
-.overviewBadges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.overviewBadge {
-  display: inline-flex;
-  padding: 0.45rem 0.75rem;
-  border-radius: 9999px;
-  background: #f3f8ff;
-  color: #094067;
-  font-size: 0.9rem;
-}
-
-.unofficialNote {
-  margin: 0;
-  color: #555;
-  font-size: 0.95rem;
-}
-
-.sectionHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.sectionHeader h2 {
-  margin: 0;
-}
-
-.linkGrid,
-.gameGrid,
-.galleryGrid,
-.pcSpecGrid {
-  display: grid;
-  gap: 1rem;
-}
-
-.linkGrid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.linkCard {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  border-radius: 16px;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  text-decoration: none;
-  color: inherit;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.linkCard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-}
-
-.linkCardTitle {
-  margin: 0;
-  font-weight: 700;
+  .profileActions {
+    flex-direction: column;
+  }
 }
 
 .linkCardDescription {
-  margin: 0.25rem 0 0;
-  color: #555;
+  margin: 0.35rem 0 0;
+  color: #aab3dd;
   font-size: 0.95rem;
 }
 
 .linkExternal {
-  font-size: 1.25rem;
+  font-size: 1.3rem;
+  color: var(--accent-strong);
 }
 
 .gameGrid {
@@ -406,42 +521,44 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 1rem;
-  border-radius: 16px;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(15, 22, 56, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .gameCardLabel {
   margin: 0;
-  color: #0f6f8f;
+  color: #88a5ff;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   font-size: 0.75rem;
 }
 
 .gameCardTitle {
   margin: 0.35rem 0 0;
   font-size: 1.05rem;
+  color: #eef4ff;
 }
 
 .gameCardDescription {
   margin: 0.75rem 0 0;
-  color: #444;
-  line-height: 1.5;
+  color: #aab3dd;
+  line-height: 1.6;
 }
 
 .gamePlayButton {
   align-self: flex-start;
-  padding: 0.75rem 1rem;
+  padding: 0.9rem 1rem;
   border-radius: 9999px;
-  background: #0f6f8f;
+  background: linear-gradient(135deg, #7d56ff 0%, #4c6aff 100%);
   color: #fff;
   text-decoration: none;
   font-weight: 700;
 }
 
-.galleryGrid {
+.galleryGrid,
+.galleryMarqueeWrapper {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
@@ -455,15 +572,15 @@ body {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden;
-  background: #eee;
+  background: #08112d;
 }
 
 .galleryImageLabel {
   margin: 0;
   font-size: 0.95rem;
-  color: #444;
+  color: #d6dbff;
   text-align: center;
 }
 
@@ -473,24 +590,25 @@ body {
 
 .pcSpecCard {
   padding: 1rem;
-  border-radius: 16px;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(15, 22, 56, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .pcSpecCardTitle {
   margin: 0 0 0.75rem;
   font-weight: 700;
+  color: #eef4ff;
 }
 
 .pcSpecList {
   margin: 0;
   padding-left: 1.25rem;
   display: grid;
-  gap: 0.4rem;
+  gap: 0.45rem;
 }
 
 .pcSpecList li {
-  color: #444;
+  color: #c7d0ff;
   font-size: 0.95rem;
 }

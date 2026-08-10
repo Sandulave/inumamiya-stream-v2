@@ -10,6 +10,7 @@ describe('TwitchController', () => {
     getUserByLogin: jest.fn(),
     getStreamByLogin: jest.fn(),
     getClipsByLogin: jest.fn(),
+    getVideosByLogin: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -38,5 +39,15 @@ describe('TwitchController', () => {
 
     expect(result).toEqual({ clips });
     expect(twitchServiceMock.getClipsByLogin).toHaveBeenCalledWith('inumamiya');
+  });
+
+  it('should return videos from the Twitch service', async () => {
+    const videos = [{ id: 'video1', url: 'https://www.twitch.tv/videos/video1' }];
+    twitchServiceMock.getVideosByLogin.mockResolvedValue(videos);
+
+    const result = await controller.getVideos('inumamiya');
+
+    expect(result).toEqual({ videos });
+    expect(twitchServiceMock.getVideosByLogin).toHaveBeenCalledWith('inumamiya');
   });
 });
