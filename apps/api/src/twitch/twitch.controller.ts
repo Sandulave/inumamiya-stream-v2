@@ -24,4 +24,14 @@ export class TwitchController {
 
     return user;
   }
+
+  @Get('streams/:login')
+  async getStream(@Param('login') login: string) {
+    const stream = await this.twitchService.getStreamByLogin(login);
+
+    return {
+      isLive: stream !== null,
+      stream,
+    };
+  }
 }

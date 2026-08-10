@@ -22,6 +22,27 @@ type TwitchUsersResponse = {
   data: TwitchUser[];
 };
 
+type TwitchStream = {
+  id: string;
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  game_id: string;
+  game_name: string;
+  type: string;
+  title: string;
+  tags: string[];
+  viewer_count: number;
+  started_at: string;
+  language: string;
+  thumbnail_url: string;
+  is_mature: boolean;
+};
+
+type TwitchStreamsResponse = {
+  data: TwitchStream[];
+};
+
 @Injectable()
 export class TwitchService {
   constructor(private readonly configService: ConfigService) {}
@@ -86,6 +107,38 @@ export class TwitchService {
     }
 
     const data = (await response.json()) as TwitchUsersResponse;
+
+    return data.data[0] ?? null;
+  }
+
+  async getStreamByLogin(login: string): Promise<TwitchStream | null> {
+    const clientId = this.configService.get<string>('TWITCH_CLIENT_ID');
+
+    if (!clientId) {
+      throw new Error('Twitch Client ID が未設定です');
+    }
+
+    const accessToken = await this.getAppAccessToken();
+
+    const params = new URLSearchParams({
+      user_login: login,
+    });
+
+    const response = await fetch(
+      `https://api.twitch.tv/helix/streams?${params.toString()}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Client-Id': clientId,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Twitch stream request failed: ${response.status}`);
+    }
+
+    const data = (await response.json()) as TwitchStreamsResponse;
 
     return data.data[0] ?? null;
   }
