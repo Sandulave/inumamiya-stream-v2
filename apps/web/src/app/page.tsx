@@ -412,6 +412,8 @@ export default async function Home() {
     fetchTwitchVideos('inumamiya'),
   ]);
 
+  const streamStatusText = stream?.isLive ? 'LIVE' : 'OFF AIR';
+
   const streamSection = stream ? (
     stream.isLive && stream.stream ? (
       <div>
@@ -442,12 +444,68 @@ export default async function Home() {
 
   return (
     <main className="page">
-      <header className="pageHeader">
-        <div>
-          <p className="pageLabel">Twitch 専用視聴ページ</p>
-          <h1>{user?.display_name ?? '配信者'}</h1>
+      <section className="heroSection">
+        <header className="pageHeader">
+          <div>
+            <p className="pageLabel">Twitch 専用視聴ページ</p>
+            <h1>{user?.display_name ?? '配信者'}</h1>
+          </div>
+        </header>
+
+        <div className="viewerHeader">
+          {user ? (
+            <>
+              <div className="profileSummary">
+                <div className="profileAvatar">
+                  <Image
+                    src={user.profile_image_url}
+                    alt={`${user.display_name} のプロフィール画像`}
+                    width={80}
+                    height={80}
+                    className="avatarImage"
+                  />
+                </div>
+                <div>
+                  <p className="displayName">{user.display_name}</p>
+                  <p className="loginName">@{user.login}</p>
+                </div>
+                <div className="streamStatus">
+                  <span className={`statusBadge ${stream?.isLive ? 'live' : 'offair'}`}>
+                    {streamStatusText}
+                  </span>
+                </div>
+              </div>
+              <div className="profileActions">
+                <a
+                  href={`https://www.twitch.tv/${user.login}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="secondaryButton"
+                >
+                  Twitchで見る
+                </a>
+                <a
+                  href={`https://www.twitch.tv/subscribe/${user.login}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="subscribeButton"
+                >
+                  サブスクする
+                </a>
+              </div>
+            </>
+          ) : (
+            <div className="profileSummary">
+              <p>プロフィール情報を読み込めませんでした。</p>
+            </div>
+          )}
+          {user ? (
+            <p className="profileDescription">
+              {user.description || '現在、自己紹介は設定されていません。'}
+            </p>
+          ) : null}
         </div>
-      </header>
+      </section>
 
       {errorMessage ? (
         <section className="statusBanner statusBannerError">
@@ -457,58 +515,6 @@ export default async function Home() {
 
       <section className="twitch-viewer-layout">
         <div className="viewerMain">
-          <div className="viewerHeader">
-            {user ? (
-              <>
-                <div className="profileSummary">
-                  <div className="profileAvatar">
-                    <Image
-                      src={user.profile_image_url}
-                      alt={`${user.display_name} のプロフィール画像`}
-                      width={80}
-                      height={80}
-                      className="avatarImage"
-                    />
-                  </div>
-                  <div>
-                    <p className="displayName">{user.display_name}</p>
-                    <p className="loginName">@{user.login}</p>
-                  </div>
-                  <div className="streamStatus">
-                    <span>{stream?.isLive ? '配信中' : 'オフライン'}</span>
-                  </div>
-                </div>
-                <div className="profileActions">
-                  <a
-                    href={`https://www.twitch.tv/${user.login}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="secondaryButton"
-                  >
-                    Twitchで見る
-                  </a>
-                  <a
-                    href={`https://www.twitch.tv/subscribe/${user.login}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="subscribeButton"
-                  >
-                    サブスクする
-                  </a>
-                </div>
-              </>
-            ) : (
-              <div className="profileSummary">
-                <p>プロフィール情報を読み込めませんでした。</p>
-              </div>
-            )}
-            {user ? (
-              <p className="profileDescription">
-                {user.description || '現在、自己紹介は設定されていません。'}
-              </p>
-            ) : null}
-          </div>
-
           <div className="playerWrapper">
             <iframe
               src={playerSrc}

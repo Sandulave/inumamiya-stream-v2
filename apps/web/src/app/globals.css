@@ -14,40 +14,62 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top left, rgba(122, 63, 255, 0.16), transparent 22%),
-    radial-gradient(circle at bottom right, rgba(34, 154, 255, 0.1), transparent 25%),
-    var(--background);
+  background-color: #02040b;
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(84, 101, 255, 0.2), transparent 19%),
+    radial-gradient(circle at 92% 13%, rgba(163, 90, 255, 0.16), transparent 17%),
+    radial-gradient(circle at 50% 92%, rgba(28, 80, 210, 0.14), transparent 20%),
+    radial-gradient(circle at 80% 72%, rgba(255, 180, 65, 0.08), transparent 15%),
+    linear-gradient(180deg, rgba(10, 15, 31, 0.95), rgba(3, 5, 12, 1));
+  background-size: cover;
   color: var(--foreground);
   font-family: Inter, Arial, Helvetica, sans-serif;
 }
 
 .page {
-  padding: 1.25rem;
+  padding: 1.5rem 1rem 2rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.75rem;
   max-width: 1280px;
   margin: 0 auto;
+}
+
+.heroSection {
+  display: grid;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border-radius: 28px;
+  border: 1px solid rgba(123, 87, 255, 0.16);
+  background: rgba(7, 10, 23, 0.86);
+  box-shadow: 0 36px 90px rgba(2, 5, 15, 0.3), inset 0 0 0 1px rgba(123, 87, 255, 0.05);
+  backdrop-filter: blur(12px);
 }
 
 .pageHeader {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.9rem;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
 }
 
 .pageLabel {
   font-size: 0.95rem;
-  color: var(--muted);
+  color: #9ba5f6;
   margin: 0;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
 .page h1 {
   margin: 0;
-  font-size: clamp(2rem, 3vw, 3rem);
-  letter-spacing: -0.04em;
+  font-size: clamp(2.4rem, 4vw, 3.6rem);
+  letter-spacing: -0.05em;
+  color: #f4f6ff;
+  text-shadow: 0 2px 12px rgba(16, 35, 89, 0.35);
 }
 
 .statusBanner {
@@ -89,8 +111,10 @@ body {
 .viewerHeader {
   display: grid;
   gap: 1rem;
-  padding: 1.3rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .profileSummary {
@@ -101,12 +125,14 @@ body {
 }
 
 .profileAvatar {
-  width: 88px;
-  height: 88px;
+  width: 96px;
+  height: 96px;
   border-radius: 9999px;
   overflow: hidden;
   flex-shrink: 0;
   background: #111a35;
+  border: 1px solid rgba(123, 87, 255, 0.3);
+  box-shadow: 0 20px 50px rgba(15, 23, 65, 0.35);
 }
 
 .avatarImage {
@@ -126,17 +152,31 @@ body {
 
 .streamStatus {
   margin-left: auto;
+  align-self: flex-start;
 }
 
-.streamStatus span {
+.statusBadge {
   display: inline-flex;
   align-items: center;
-  padding: 0.55rem 0.95rem;
+  padding: 0.55rem 1rem;
   border-radius: 9999px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
   font-size: 0.95rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.statusBadge.live {
+  background: rgba(233, 80, 88, 0.14);
+  color: #ffb3b3;
+  border-color: rgba(233, 80, 88, 0.28);
+}
+
+.statusBadge.offair {
+  background: rgba(68, 80, 150, 0.18);
+  color: #d7dcff;
+  border-color: rgba(118, 101, 255, 0.18);
 }
 
 .profileDescription {
@@ -149,7 +189,9 @@ body {
 .profileActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.9rem;
+  margin-top: 0.6rem;
+  align-items: center;
 }
 
 .secondaryButton,
@@ -157,23 +199,33 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.95rem 1.4rem;
+  padding: 0.95rem 1.3rem;
   border-radius: 9999px;
   font-weight: 700;
   text-decoration: none;
-  min-width: 170px;
+  min-width: 150px;
+  max-width: 220px;
+  flex: 1 0 auto;
 }
 
 .secondaryButton {
-  color: #a9c9ff;
-  background: rgba(92, 120, 255, 0.12);
-  border: 1px solid rgba(92, 120, 255, 0.2);
+  color: #c7d4ff;
+  background: rgba(82, 91, 152, 0.18);
+  border: 1px solid rgba(92, 120, 255, 0.22);
+}
+
+.secondaryButton:hover {
+  background: rgba(92, 120, 255, 0.22);
 }
 
 .subscribeButton {
   color: #fff;
-  background: linear-gradient(135deg, #9d68ff 0%, #5467ff 100%);
-  box-shadow: 0 16px 38px rgba(84, 103, 255, 0.25);
+  background: linear-gradient(135deg, #9653ff 0%, #5c5cff 100%);
+  box-shadow: 0 18px 45px rgba(96, 72, 255, 0.28);
+}
+
+.subscribeButton:hover {
+  opacity: 0.98;
 }
 
 .secondaryButton:hover,
@@ -184,10 +236,12 @@ body {
 .playerWrapper {
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 24px;
+  border-radius: 28px;
   overflow: hidden;
-  background: #050715;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #020712;
+  border: 1px solid rgba(118, 106, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 18px 60px rgba(10, 18, 45, 0.3);
 }
 
 .playerWrapper iframe {
@@ -202,7 +256,8 @@ body {
 .qrSection,
 .gameSection,
 .gallerySection,
-.pcSpecSection {
+.pcSpecSection,
+.archiveSection {
   padding: 1.15rem;
 }
 
@@ -221,13 +276,19 @@ body {
 .sectionHeader {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  margin-bottom: 0.8rem;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
 }
 
 .sectionHeader p {
   margin: 0;
-  color: var(--muted);
+  color: #b9c2ed;
 }
 
 .clipSectionHeader {
@@ -254,7 +315,14 @@ body {
 .qrGrid,
 .pcSpecGrid,
 .archiveGrid {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+@media (min-width: 1200px) {
+  .clipGrid,
+  .archiveGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .clipCard,
@@ -264,13 +332,41 @@ body {
 .pcSpecCard,
 .archiveCard {
   display: block;
-  border-radius: 20px;
+  border-radius: 24px;
   overflow: hidden;
-  background: rgba(15, 22, 56, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(12, 15, 32, 0.82);
+  border: 1px solid rgba(155, 130, 255, 0.14);
+  backdrop-filter: blur(10px);
   text-decoration: none;
   color: inherit;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02), 0 14px 35px rgba(0, 0, 0, 0.16);
+}
+
+.clipCard::before,
+.archiveCard::before,
+.linkCard::before,
+.qrCard::before,
+.gameCard::before,
+.pcSpecCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255, 217, 180, 0.14), rgba(123, 87, 255, 0.2), rgba(255, 217, 180, 0.14));
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.clipCard,
+.linkCard,
+.qrCard,
+.gameCard,
+.pcSpecCard,
+.archiveCard {
+  position: relative;
 }
 
 .archiveCard:hover,
@@ -280,16 +376,8 @@ body {
 .gameCard:hover,
 .pcSpecCard:hover {
   transform: translateY(-2px);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
-}
-
-.clipCard:hover,
-.linkCard:hover,
-.qrCard:hover,
-.gameCard:hover,
-.pcSpecCard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 24px 60px rgba(10, 18, 42, 0.32), 0 0 0 1px rgba(123, 87, 255, 0.1);
+  border-color: rgba(123, 87, 255, 0.32);
 }
 
 .clipThumbnail,
@@ -325,6 +413,11 @@ body {
   margin: 0;
   font-weight: 700;
   color: #eef4ff;
+  letter-spacing: -0.02em;
+}
+
+.clipTitle {
+  font-size: 1.05rem;
 }
 
 .clipMeta,
@@ -333,9 +426,17 @@ body {
 .gameCardDescription,
 .pcSpecList li {
   margin: 0;
-  color: #aab3dd;
-  font-size: 0.95rem;
-  line-height: 1.6;
+  color: #b0b9dd;
+  font-size: 0.98rem;
+  line-height: 1.75;
+}
+
+.clipInfo {
+  padding: 1.2rem;
+}
+
+.archiveCard .clipInfo {
+  padding: 1.2rem;
 }
 
 .linkExternal {
@@ -440,27 +541,21 @@ body {
   color: #f7f8ff;
 }
 
-.archiveSection {
-  padding: 1.15rem;
-}
-
-.archiveGrid {
-  display: grid;
-  gap: 1rem;
-}
-
-.archiveCard {
-  display: block;
-}
-
 .chatWrapper {
-  max-width: 400px;
-  background: rgba(7, 11, 25, 0.95);
+  max-width: 420px;
+  background: rgba(8, 14, 32, 0.95);
+  border: 1px solid rgba(123, 87, 255, 0.14);
+  box-shadow: 0 18px 35px rgba(10, 18, 45, 0.26);
+}
+
+.chatWrapper iframe {
+  width: 100%;
+  min-height: 500px;
 }
 
 @media (min-width: 992px) {
   .twitch-viewer-layout {
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) 380px;
     align-items: start;
   }
 
