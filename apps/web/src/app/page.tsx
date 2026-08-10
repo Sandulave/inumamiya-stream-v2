@@ -537,7 +537,7 @@ export default async function Home() {
                     key={clip.id}
                     href={clip.url}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noreferrer noopener"
                     className="clipCard"
                   >
                     <div className="clipThumbnail">
