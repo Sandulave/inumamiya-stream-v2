@@ -1,4 +1,11 @@
 ﻿import Image from 'next/image';
+import {
+  games,
+  pcSpecs,
+  profileGallery,
+  profileLinks,
+  sitePhrases,
+} from '../data/streamerData';
 
 type TwitchUser = {
   id: string;
@@ -100,6 +107,132 @@ async function fetchTwitchClips(login: string): Promise<TwitchClip[] | null> {
   }
 }
 
+function SiteOverviewSection() {
+  return (
+    <section className="siteOverviewSection">
+      <p className="overviewNote">
+        ネットや配信の話題を、ゆるくまとめるプロフィールページ。
+      </p>
+      <div className="overviewBadges">
+        {sitePhrases.map((phrase) => (
+          <span key={phrase} className="overviewBadge">
+            {phrase}
+          </span>
+        ))}
+      </div>
+      <p className="unofficialNote">このページは非公式のファンサイトです。</p>
+    </section>
+  );
+}
+
+function ExternalLinksSection() {
+  return (
+    <section className="linkSection">
+      <div className="sectionHeader">
+        <h2>リンク集</h2>
+        <p>旧サイトの外部リンクをまとめました。すべて新しいタブで開きます。</p>
+      </div>
+      <div className="linkGrid">
+        {profileLinks.map((link) => (
+          <a
+            key={link.name}
+            href={link.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="linkCard"
+          >
+            <div>
+              <p className="linkCardTitle">{link.name}</p>
+              <p className="linkCardDescription">{link.description}</p>
+            </div>
+            <span className="linkExternal">↗</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GamesSection() {
+  return (
+    <section className="gameSection">
+      <div className="sectionHeader">
+        <h2>INUMAMIYA GAMES</h2>
+        <p>旧サイト掲載のゲームをプレイできるリンクです。</p>
+      </div>
+      <div className="gameGrid">
+        {games.map((game) => (
+          <article key={game.name} className="gameCard">
+            <div>
+              <p className="gameCardLabel">GAME</p>
+              <h3 className="gameCardTitle">{game.name}</h3>
+              <p className="gameCardDescription">{game.description}</p>
+            </div>
+            <a
+              href={game.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="gamePlayButton"
+            >
+              プレイする
+            </a>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ProfileGallerySection() {
+  return (
+    <section className="gallerySection">
+      <div className="sectionHeader">
+        <h2>プロフィールギャラリー</h2>
+        <p>旧サイトにあったプロフィール画像をコンパクトに表示します。</p>
+      </div>
+      <div className="galleryGrid">
+        {profileGallery.map((image) => (
+          <div key={image.src} className="galleryImageCard">
+            <div className="galleryImageWrapper">
+              <Image
+                src={image.src}
+                alt={image.alt}
+                fill
+                sizes="(max-width: 768px) 100vw, 180px"
+                style={{ objectFit: 'cover' }}
+              />
+            </div>
+            <p className="galleryImageLabel">{image.alt}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PcSpecSection() {
+  return (
+    <section className="pcSpecSection">
+      <div className="sectionHeader">
+        <h2>PC SPEC</h2>
+        <p>旧サイトの PC スペックを読みやすいカード形式で掲載します。</p>
+      </div>
+      <div className="pcSpecGrid">
+        {pcSpecs.map((section) => (
+          <div key={section.title} className="pcSpecCard">
+            <p className="pcSpecCardTitle">{section.title}</p>
+            <ul className="pcSpecList">
+              {section.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default async function Home() {
   const [{ user, stream, errorMessage }, clips] = await Promise.all([
     fetchTwitchData('inumamiya'),
@@ -198,6 +331,7 @@ export default async function Home() {
             {streamSection}
           </section>
 
+          <SiteOverviewSection />
           <section className="clipSection">
             <div className="clipSectionHeader">
               <h2>最新クリップ</h2>
@@ -235,6 +369,11 @@ export default async function Home() {
               <p>クリップの取得に失敗しました。</p>
             )}
           </section>
+
+          <ExternalLinksSection />
+          <GamesSection />
+          <ProfileGallerySection />
+          <PcSpecSection />
         </div>
 
         <aside className="chatPanel">

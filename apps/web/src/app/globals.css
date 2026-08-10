@@ -286,4 +286,211 @@ body {
   .streamStatus {
     margin-left: 0;
   }
+
+  .twitch-viewer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .chatPanel {
+    max-width: 100%;
+  }
+}
+
+.siteOverviewSection,
+.linkSection,
+.gameSection,
+.gallerySection,
+.pcSpecSection {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.siteOverviewSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.overviewNote {
+  margin: 0;
+  font-weight: 700;
+}
+
+.overviewBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.overviewBadge {
+  display: inline-flex;
+  padding: 0.45rem 0.75rem;
+  border-radius: 9999px;
+  background: #f3f8ff;
+  color: #094067;
+  font-size: 0.9rem;
+}
+
+.unofficialNote {
+  margin: 0;
+  color: #555;
+  font-size: 0.95rem;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sectionHeader h2 {
+  margin: 0;
+}
+
+.linkGrid,
+.gameGrid,
+.galleryGrid,
+.pcSpecGrid {
+  display: grid;
+  gap: 1rem;
+}
+
+.linkGrid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.linkCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.linkCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.linkCardTitle {
+  margin: 0;
+  font-weight: 700;
+}
+
+.linkCardDescription {
+  margin: 0.25rem 0 0;
+  color: #555;
+  font-size: 0.95rem;
+}
+
+.linkExternal {
+  font-size: 1.25rem;
+}
+
+.gameGrid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.gameCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.gameCardLabel {
+  margin: 0;
+  color: #0f6f8f;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+}
+
+.gameCardTitle {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+}
+
+.gameCardDescription {
+  margin: 0.75rem 0 0;
+  color: #444;
+  line-height: 1.5;
+}
+
+.gamePlayButton {
+  align-self: flex-start;
+  padding: 0.75rem 1rem;
+  border-radius: 9999px;
+  background: #0f6f8f;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.galleryGrid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.galleryImageCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.galleryImageWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #eee;
+}
+
+.galleryImageLabel {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #444;
+  text-align: center;
+}
+
+.pcSpecGrid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.pcSpecCard {
+  padding: 1rem;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.pcSpecCardTitle {
+  margin: 0 0 0.75rem;
+  font-weight: 700;
+}
+
+.pcSpecList {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.pcSpecList li {
+  color: #444;
+  font-size: 0.95rem;
 }
