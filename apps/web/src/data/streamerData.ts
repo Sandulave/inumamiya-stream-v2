@@ -26,11 +26,7 @@ export type QrLink = {
   description: string;
 };
 
-export const sitePhrases = [
-  'ネットや配信の話題を、ゆるくまとめるプロフィールページ。',
-  'ふらっと立ち寄れる配信ラウンジ',
-  '雑談 / ゲーム / ゆるトーク',
-];
+// sitePhrases removed (old static copy) - no longer used in UI
 
 export const profileLinks: ExternalLink[] = [
   {
