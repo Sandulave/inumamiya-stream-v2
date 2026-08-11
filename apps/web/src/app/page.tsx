@@ -258,17 +258,19 @@ function QrCardSection() {
             className="qrCard"
           >
             <div className="qrImageWrapper">
-              <Image
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                  link.url,
-                )}`}
-                alt={`${link.name} QRコード`}
-                fill
-                sizes="180px"
-                style={{ objectFit: 'contain' }}
-              />
+              <div className="qrImageInner">
+                <Image
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                    link.url,
+                  )}`}
+                  alt={`${link.name} QRコード`}
+                  fill
+                  sizes="180px"
+                  style={{ objectFit: 'contain' }}
+                />
+              </div>
             </div>
-            <div>
+            <div className="qrCardBody">
               <p className="qrCardTitle">{link.name}</p>
               <p className="qrCardDescription">{link.description}</p>
             </div>
