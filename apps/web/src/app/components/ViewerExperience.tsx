@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import TabPanel from './TabPanel';
 
 type TwitchClip = {
@@ -31,73 +31,128 @@ type TwitchVideo = {
   duration: string;
 };
 
+type SelectedContent =
+  | { type: 'vod'; id: string }
+  | { type: 'clip'; id: string }
+  | null;
+
 type Props = {
   channel: string;
   parentHost: string;
   isLive: boolean;
   userLogin: string;
-  streamInfo: React.ReactNode;
   clips: TwitchClip[] | null;
   videos: TwitchVideo[] | null;
+  initialClipCursor?: string;
+  initialVideoCursor?: string;
 };
+
+function buildPlayerRoute(type: 'vod' | 'clip', id: string) {
+  const params = new URLSearchParams({ type, id });
+
+  return `/twitch-player?${params.toString()}`;
+}
+
+function buildVodIframeSrc(videoId: string, parentHost: string) {
+  const parentParam = `parent=${encodeURIComponent(parentHost)}`;
+
+  return `https://player.twitch.tv/?video=v${encodeURIComponent(videoId)}&${parentParam}&autoplay=true&muted=false`;
+}
 
 export default function ViewerExperience({
   channel,
   parentHost,
   isLive,
   userLogin,
-  streamInfo,
   clips,
   videos,
+  initialClipCursor,
+  initialVideoCursor,
 }: Props) {
   const latestVideoId = useMemo(() => {
     if (!videos || videos.length === 0) return null;
     return videos[0].id;
   }, [videos]);
 
-  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [selectedContent, setSelectedContent] = useState<SelectedContent>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
-
-  const activeVideoId = isLive ? null : selectedVideoId ?? latestVideoId;
 
   const effectiveParentHost = useMemo(() => {
     if (typeof window !== 'undefined' && parentHost === 'localhost') {
       return window.location.hostname;
     }
+
     return parentHost;
   }, [parentHost]);
 
-  const iframeSrc = useMemo(() => {
+  const liveIframeSrc = useMemo(() => {
     const parentParam = `parent=${encodeURIComponent(effectiveParentHost)}`;
-    if (isLive) {
-      return `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&${parentParam}&autoplay=false`;
-    }
-
-    if (activeVideoId) {
-      return `https://player.twitch.tv/?video=v${encodeURIComponent(activeVideoId)}&${parentParam}&autoplay=false`;
-    }
 
     return `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&${parentParam}&autoplay=false`;
-  }, [channel, effectiveParentHost, isLive, activeVideoId]);
+  }, [channel, effectiveParentHost]);
 
-  const handleSelectArchive = useCallback(
-    (videoId: string) => {
-      setSelectedVideoId(videoId);
-      playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
-    [],
-  );
+  const embeddedContent = useMemo(() => {
+    if (isLive) return null;
+
+    if (selectedContent?.type === 'clip') {
+      return selectedContent;
+    }
+
+    if (selectedContent?.type === 'vod') {
+      return selectedContent;
+    }
+
+    if (latestVideoId) {
+      return { type: 'vod', id: latestVideoId } as const;
+    }
+
+    return null;
+  }, [isLive, latestVideoId, selectedContent]);
+
+  const embeddedPlayerSrc = useMemo(() => {
+    if (!embeddedContent) return null;
+
+    if (embeddedContent.type === 'vod') {
+      return buildVodIframeSrc(embeddedContent.id, effectiveParentHost);
+    }
+
+    return buildPlayerRoute(embeddedContent.type, embeddedContent.id);
+  }, [effectiveParentHost, embeddedContent]);
+
+  const handleSelectArchive = useCallback((videoId: string) => {
+    setSelectedContent({ type: 'vod', id: videoId });
+    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const handleSelectClip = useCallback((clipId: string) => {
+    setSelectedContent({ type: 'clip', id: clipId });
+    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   return (
     <>
       <div className="playerWrapper" ref={playerRef}>
-        <iframe
-          src={iframeSrc}
-          title="Twitch Player"
-          allowFullScreen
-          frameBorder="0"
-          scrolling="no"
-        />
+        {embeddedContent && embeddedPlayerSrc ? (
+          <iframe
+            key={`${embeddedContent.type}-${embeddedContent.id}`}
+            src={embeddedPlayerSrc}
+            title="Twitch Player"
+            allow="autoplay; fullscreen"
+            allowFullScreen
+            frameBorder="0"
+            scrolling="no"
+          />
+        ) : (
+          <iframe
+            key={`live-${channel}`}
+            src={liveIframeSrc}
+            title="Twitch Live Player"
+            allow="autoplay; fullscreen"
+            allowFullScreen
+            frameBorder="0"
+            scrolling="no"
+          />
+        )}
       </div>
       <div className="playerActions">
         <a
@@ -106,21 +161,28 @@ export default function ViewerExperience({
           rel="noreferrer noopener"
           className="subscribeButton"
         >
+          <span className="subscribeIcon" aria-hidden="true">★</span>
           サブスクする
         </a>
       </div>
 
-      <section className="streamInfoSection">
-        <h2>配信状況</h2>
-        {streamInfo}
-      </section>
-
       <TabPanel
         clips={clips}
         videos={videos}
+        login={userLogin}
         isLive={isLive}
-        selectedVideoId={activeVideoId ?? undefined}
+        initialClipCursor={initialClipCursor}
+        initialVideoCursor={initialVideoCursor}
+        selectedVideoId={
+          selectedContent?.type === 'vod'
+            ? selectedContent.id
+            : selectedContent === null && !isLive
+              ? latestVideoId
+              : undefined
+        }
+        selectedClipId={selectedContent?.type === 'clip' ? selectedContent.id : undefined}
         onSelectArchive={handleSelectArchive}
+        onSelectClip={handleSelectClip}
       />
     </>
   );

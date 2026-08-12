@@ -16,6 +16,13 @@ export const metadata: Metadata = {
   title: "いぬまみや専用視聴ページ",
   description:
     "いぬまみやのTwitch配信とアーカイブをまとめて視聴できる専用ページです。ライブ中は配信を、オフライン時は最新のアーカイブを再生します。",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "70x70" },
+      { url: "/icon.png", type: "image/png", sizes: "300x300" },
+    ],
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "300x300" }],
+  },
   openGraph: {
     title: "いぬまみや専用視聴ページ",
     description:

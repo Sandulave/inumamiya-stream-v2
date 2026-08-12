@@ -24,6 +24,17 @@ export type QrLink = {
   name: string;
   url: string;
   description: string;
+  centerVisual:
+    | {
+        kind: 'brand';
+        service: 'youtube' | 'domodomo-video';
+      }
+    | {
+        kind: 'image';
+        src: string;
+        alt: string;
+        service?: 'discord' | 'line' | 'youtube' | 'domodomo';
+      };
 };
 
 // sitePhrases removed (old static copy) - no longer used in UI
@@ -76,21 +87,45 @@ export const qrLinks: QrLink[] = [
     name: 'Discord',
     url: 'https://discord.gg/CcRNgETs7W',
     description: 'ファンコミュニティ',
+    centerVisual: {
+      kind: 'image',
+      src: '/qr/discord-symbol.svg',
+      alt: 'Discord 公式シンボル',
+      service: 'discord',
+    },
   },
   {
     name: 'YouTube',
     url: 'https://www.youtube.com/channel/UC3K67dwtrnZFI_dVn5LYWGA',
     description: '公式YouTubeチャンネル',
+    centerVisual: {
+      kind: 'image',
+      src: '/qr/youtube-channel.png',
+      alt: 'YouTube チャンネル画像',
+      service: 'youtube',
+    },
   },
   {
     name: 'どもども動画',
     url: 'https://www.youtube.com/channel/UCeaXl91nkdPp6isMzI548vg',
     description: 'どもども動画チャンネル',
+    centerVisual: {
+      kind: 'image',
+      src: '/qr/domodomo-channel.png',
+      alt: 'どもども動画 チャンネル画像',
+      service: 'domodomo',
+    },
   },
   {
     name: 'LINE OPENCHAT',
     url: 'https://line.me/ti/g2/nbHvs4pt-v_8nhwuRxD_o_0CEAM1L1HiFBfpzqA?utm_source=invitation&utm_medium=link_copy&utm_campaign=default',
     description: 'オープンチャット',
+    centerVisual: {
+      kind: 'image',
+      src: '/qr/line-brand-icon.png',
+      alt: 'LINE 公式ブランドアイコン',
+      service: 'line',
+    },
   },
 ];
 

@@ -52,6 +52,20 @@ type TwitchPageData = {
   errorMessage: string | null;
 };
 
+type TwitchClipListResponse = {
+  clips: TwitchClip[];
+  pagination?: {
+    cursor?: string;
+  };
+};
+
+type TwitchVideoListResponse = {
+  videos: TwitchVideo[];
+  pagination?: {
+    cursor?: string;
+  };
+};
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const TWITCH_CHANNEL = 'inumamiya';
 const TWITCH_PARENT_HOST = process.env.NEXT_PUBLIC_TWITCH_PARENT_HOST ?? 'localhost';
@@ -100,11 +114,16 @@ async function fetchTwitchData(login: string): Promise<TwitchPageData> {
   return { user, stream, errorMessage };
 }
 
-async function fetchTwitchClips(login: string): Promise<TwitchClip[] | null> {
+async function fetchTwitchClips(
+  login: string,
+): Promise<TwitchClipListResponse | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/twitch/clips/${login}`, {
-      cache: 'no-store',
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/twitch/clips/${login}?first=6&sort=latest`,
+      {
+        cache: 'no-store',
+      },
+    );
 
     if (!response.ok) {
       return null;
@@ -112,17 +131,22 @@ async function fetchTwitchClips(login: string): Promise<TwitchClip[] | null> {
 
     const data = await response.json();
 
-    return data.clips as TwitchClip[];
+    return data as TwitchClipListResponse;
   } catch {
     return null;
   }
 }
 
-async function fetchTwitchVideos(login: string): Promise<TwitchVideo[] | null> {
+async function fetchTwitchVideos(
+  login: string,
+): Promise<TwitchVideoListResponse | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/twitch/videos/${login}`, {
-      cache: 'no-store',
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/twitch/videos/${login}?first=6&sort=latest`,
+      {
+        cache: 'no-store',
+      },
+    );
 
     if (!response.ok) {
       return null;
@@ -130,7 +154,7 @@ async function fetchTwitchVideos(login: string): Promise<TwitchVideo[] | null> {
 
     const data = await response.json();
 
-    return data.videos as TwitchVideo[];
+    return data as TwitchVideoListResponse;
   } catch {
     return null;
   }
@@ -141,41 +165,18 @@ async function fetchTwitchVideos(login: string): Promise<TwitchVideo[] | null> {
 function ProfileGallerySection({ initialImage }: { initialImage?: string }) {
   return (
     <section className="gallerySection heroProfileSection">
-      <div className="heroProfileLabel">PROFILE</div>
       <ProfileSlider initialImage={initialImage} />
     </section>
   );
 }
 
 export default async function Home() {
-  const [{ user, stream, errorMessage }, clips, videos] = await Promise.all([
+  const [{ user, stream, errorMessage }, clipData, videoData] = await Promise.all([
     fetchTwitchData('inumamiya'),
     fetchTwitchClips('inumamiya'),
     fetchTwitchVideos('inumamiya'),
   ]);
-
   const streamStatusText = stream?.isLive ? 'LIVE' : 'OFF AIR';
-
-  const streamSection = stream ? (
-    stream.isLive && stream.stream ? (
-      <div>
-        <p>配信中</p>
-        <p>
-          <strong>タイトル:</strong> {stream.stream.title}
-        </p>
-        <p>
-          <strong>ゲーム名:</strong> {stream.stream.game_name}
-        </p>
-        <p>
-          <strong>視聴者数:</strong> {stream.stream.viewer_count}
-        </p>
-      </div>
-    ) : (
-      <p>現在配信していません。</p>
-    )
-  ) : (
-    <p>配信情報を読み込めませんでした。</p>
-  );
 
   const chatSrc = `https://www.twitch.tv/embed/${encodeURIComponent(
     TWITCH_CHANNEL,
@@ -184,10 +185,16 @@ export default async function Home() {
   return (
     <main className="page">
       <section className="heroSection">
+        <div className="heroStatusBadge">
+          <span className={`statusBadge ${stream?.isLive ? 'live' : 'offair'}`}>
+            {streamStatusText}
+          </span>
+        </div>
         <div className="heroInner">
           <div className="heroLeft">
             <header className="pageHeader">
               <div>
+                <p className="pageLabel">Twitch fan viewing portal</p>
                 <h1>いぬまみや専用視聴ページ</h1>
               </div>
             </header>
@@ -198,37 +205,19 @@ export default async function Home() {
                   <div>
                     <p className="loginName heroLoginName">@{user.login}</p>
                   </div>
-                  <div className="streamStatus">
-                    <span className={`statusBadge ${stream?.isLive ? 'live' : 'offair'}`}>
-                      {streamStatusText}
-                    </span>
-                  </div>
-                  <div className="profileActions">
-                    <a
-                      href={`https://www.twitch.tv/${user.login}`}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="secondaryButton"
-                    >
-                      Twitchで見る
-                    </a>
-                  </div>
                 </div>
               ) : (
                 <div className="profileSummary">
                   <p>プロフィール情報を読み込めませんでした。</p>
                 </div>
               )}
+              <ProfileGallerySection initialImage={user?.profile_image_url} />
               {user ? (
                 <p className="profileDescription">
                   {user.description || '現在、自己紹介は設定されていません。'}
                 </p>
               ) : null}
             </div>
-          </div>
-
-          <div className="heroRight">
-            <ProfileGallerySection initialImage={user?.profile_image_url} />
           </div>
         </div>
       </section>
@@ -246,15 +235,13 @@ export default async function Home() {
               parentHost={TWITCH_PARENT_HOST}
               isLive={stream?.isLive ?? false}
               userLogin={user?.login ?? TWITCH_CHANNEL}
-              streamInfo={streamSection}
-              clips={clips}
-              videos={videos}
+              clips={clipData?.clips ?? null}
+              videos={videoData?.videos ?? null}
+              initialClipCursor={clipData?.pagination?.cursor}
+              initialVideoCursor={videoData?.pagination?.cursor}
             />
           </div>
         <aside className="chatPanel">
-          <div className="chatHeader">
-            <p>チャット</p>
-          </div>
           <div className="chatWrapper">
             <iframe
               src={chatSrc}

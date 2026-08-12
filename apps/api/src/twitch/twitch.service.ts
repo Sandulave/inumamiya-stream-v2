@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 type TwitchTokenResponse = {
@@ -62,7 +62,24 @@ type TwitchClip = {
 
 type TwitchClipsResponse = {
   data: TwitchClip[];
+  pagination?: {
+    cursor?: string;
+  };
 };
+
+type SortMode = 'latest' | 'views';
+
+type ClipCursor =
+  | {
+      version: 1;
+      sort: 'views';
+      twitchCursor: string;
+    }
+  | {
+      version: 1;
+      sort: 'latest';
+      before: string;
+    };
 
 type TwitchVideo = {
   id: string;
@@ -82,10 +99,25 @@ type TwitchVideo = {
 
 type TwitchVideosResponse = {
   data: TwitchVideo[];
+  pagination?: {
+    cursor?: string;
+  };
+};
+
+type TwitchPaginatedResult<T> = {
+  data: T[];
+  pagination: {
+    cursor?: string;
+  };
+  hasMore?: boolean;
+  sort?: SortMode;
 };
 
 @Injectable()
 export class TwitchService {
+  private readonly latestClipWindowMs = 30 * 24 * 60 * 60 * 1000;
+  private readonly maxLatestClipWindows = 24;
+
   constructor(private readonly configService: ConfigService) {}
 
   async getAppAccessToken(): Promise<string> {
@@ -184,7 +216,12 @@ export class TwitchService {
     return data.data[0] ?? null;
   }
 
-  async getClipsByLogin(login: string, limit = 6): Promise<TwitchClip[]> {
+  async getClipsByLogin(
+    login: string,
+    limit = 6,
+    after?: string,
+    sort: SortMode = 'latest',
+  ): Promise<TwitchPaginatedResult<TwitchClip>> {
     const user = await this.getUserByLogin(login);
 
     if (!user) {
@@ -199,11 +236,20 @@ export class TwitchService {
 
     const accessToken = await this.getAppAccessToken();
 
+    if (sort === 'latest') {
+      return this.getLatestClips(user.id, accessToken, clientId, limit, after);
+    }
+
+    const cursor = after ? this.decodeClipCursor(after, sort) : null;
+
     const params = new URLSearchParams({
       broadcaster_id: user.id,
       first: String(limit),
-      type: 'archive',
     });
+
+    if (cursor?.sort === 'views') {
+      params.set('after', cursor.twitchCursor);
+    }
 
     const response = await fetch(
       `https://api.twitch.tv/helix/clips?${params.toString()}`,
@@ -221,10 +267,175 @@ export class TwitchService {
 
     const data = (await response.json()) as TwitchClipsResponse;
 
-    return data.data;
+    return {
+      data: data.data,
+      pagination: {
+        cursor: data.pagination?.cursor
+          ? this.encodeClipCursor({
+              version: 1,
+              sort: 'views',
+              twitchCursor: data.pagination.cursor,
+            })
+          : undefined,
+      },
+      hasMore: Boolean(data.pagination?.cursor),
+      sort: 'views',
+    };
   }
 
-  async getVideosByLogin(login: string, limit = 6): Promise<TwitchVideo[]> {
+  private async getLatestClips(
+    broadcasterId: string,
+    accessToken: string,
+    clientId: string,
+    limit: number,
+    after?: string,
+  ): Promise<TwitchPaginatedResult<TwitchClip>> {
+    const cursor = after ? this.decodeClipCursor(after, 'latest') : null;
+    let before = cursor?.sort === 'latest' ? new Date(cursor.before) : new Date();
+
+    if (Number.isNaN(before.getTime())) {
+      throw new BadRequestException('Invalid clip cursor');
+    }
+
+    const collected: TwitchClip[] = [];
+    let exploredWindows = 0;
+
+    while (collected.length < limit && exploredWindows < this.maxLatestClipWindows) {
+      const endedAt = before;
+      const startedAt = new Date(endedAt.getTime() - this.latestClipWindowMs);
+      const windowClips = await this.getAllClipsInWindow(
+        broadcasterId,
+        accessToken,
+        clientId,
+        startedAt,
+        endedAt,
+      );
+
+      collected.push(
+        ...windowClips.filter(
+          (clip) => new Date(clip.created_at).getTime() < before.getTime(),
+        ),
+      );
+      before = startedAt;
+      exploredWindows += 1;
+    }
+
+    const sorted = this.dedupeClips(collected).sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+    const page = sorted.slice(0, limit);
+    const oldestReturned = page.at(-1);
+    const nextCursor =
+      oldestReturned && (sorted.length > limit || exploredWindows < this.maxLatestClipWindows)
+        ? this.encodeClipCursor({
+            version: 1,
+            sort: 'latest',
+            before: oldestReturned.created_at,
+          })
+        : undefined;
+
+    return {
+      data: page,
+      pagination: {
+        cursor: nextCursor,
+      },
+      hasMore: Boolean(nextCursor),
+      sort: 'latest',
+    };
+  }
+
+  private async getAllClipsInWindow(
+    broadcasterId: string,
+    accessToken: string,
+    clientId: string,
+    startedAt: Date,
+    endedAt: Date,
+  ) {
+    const clips: TwitchClip[] = [];
+    let after: string | undefined;
+
+    do {
+      const params = new URLSearchParams({
+        broadcaster_id: broadcasterId,
+        first: '100',
+        started_at: startedAt.toISOString(),
+        ended_at: endedAt.toISOString(),
+      });
+
+      if (after) {
+        params.set('after', after);
+      }
+
+      const response = await fetch(
+        `https://api.twitch.tv/helix/clips?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Client-Id': clientId,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Twitch clips request failed: ${response.status}`);
+      }
+
+      const data = (await response.json()) as TwitchClipsResponse;
+      clips.push(...data.data);
+      after = data.pagination?.cursor;
+    } while (after);
+
+    return clips;
+  }
+
+  private dedupeClips(clips: TwitchClip[]) {
+    const seen = new Set<string>();
+
+    return clips.filter((clip) => {
+      if (seen.has(clip.id)) {
+        return false;
+      }
+
+      seen.add(clip.id);
+      return true;
+    });
+  }
+
+  private encodeClipCursor(cursor: ClipCursor) {
+    return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+  }
+
+  private decodeClipCursor(cursorValue: string, sort: SortMode): ClipCursor {
+    try {
+      const decoded = JSON.parse(
+        Buffer.from(cursorValue, 'base64url').toString('utf8'),
+      ) as ClipCursor;
+
+      if (decoded.version !== 1 || decoded.sort !== sort) {
+        throw new Error('Cursor mismatch');
+      }
+
+      if (decoded.sort === 'views' && !decoded.twitchCursor) {
+        throw new Error('Invalid views cursor');
+      }
+
+      if (decoded.sort === 'latest' && Number.isNaN(Date.parse(decoded.before))) {
+        throw new Error('Invalid latest cursor');
+      }
+
+      return decoded;
+    } catch {
+      throw new BadRequestException('Invalid clip cursor');
+    }
+  }
+
+  async getVideosByLogin(
+    login: string,
+    limit = 6,
+    after?: string,
+    sort: SortMode = 'latest',
+  ): Promise<TwitchPaginatedResult<TwitchVideo>> {
     const user = await this.getUserByLogin(login);
 
     if (!user) {
@@ -243,8 +454,12 @@ export class TwitchService {
       user_id: user.id,
       first: String(limit),
       type: 'archive',
-      sort: 'time',
+      sort: sort === 'views' ? 'views' : 'time',
     });
+
+    if (after) {
+      params.set('after', after);
+    }
 
     const response = await fetch(
       `https://api.twitch.tv/helix/videos?${params.toString()}`,
@@ -265,6 +480,13 @@ export class TwitchService {
 
     const data = (await response.json()) as TwitchVideosResponse;
 
-    return data.data;
+    return {
+      data: data.data,
+      pagination: {
+        cursor: data.pagination?.cursor,
+      },
+      hasMore: Boolean(data.pagination?.cursor),
+      sort,
+    };
   }
 }
