@@ -4,17 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "dev": "pnpm --parallel --filter web --filter api run dev"
-},
+    "dev": "pnpm --parallel --filter web --filter api run dev"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.20.0",
-      "onFail": "download"
-    }
-  },
+  "packageManager": "pnpm@10.26.0",
   "type": "module"
 }

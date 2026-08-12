@@ -385,6 +385,22 @@ export default function TabPanel({
     };
   }
 
+  function sortVideosByMode(items: TwitchVideo[], mode: SortMode) {
+    return [...items].sort((a, b) => {
+      if (mode === 'views') {
+        const viewDifference = b.view_count - a.view_count;
+
+        if (viewDifference !== 0) {
+          return viewDifference;
+        }
+      }
+
+      return (
+        new Date(b.published_at).getTime() - new Date(a.published_at).getTime()
+      );
+    });
+  }
+
   async function loadMoreClips() {
     if (!clipCursor || loadingClips) return;
 
@@ -494,7 +510,7 @@ export default function TabPanel({
         const base = current ?? [];
         const { items, added } = appendUnique(base, data.videos);
         setVideoStatus(added > 0 ? `${added}件追加しました` : '新しいアーカイブはありません');
-        return items;
+        return sortVideosByMode(items, requestSort);
       });
       setVideoCursor(data.pagination?.cursor);
     } catch {
@@ -533,7 +549,7 @@ export default function TabPanel({
         return;
       }
 
-      setVisibleVideos(data.videos);
+      setVisibleVideos(sortVideosByMode(data.videos, mode));
       setVideoCursor(data.pagination?.cursor);
       setVideoStatus(null);
     } catch {
@@ -597,6 +613,8 @@ export default function TabPanel({
       return <p>現在表示できるアーカイブはありません。</p>;
     }
 
+    const displayedVideos = sortVideosByMode(visibleVideos, videoSortMode);
+
     return (
       <section className="archiveSection">
         <div className="panelTopBar">
@@ -611,7 +629,7 @@ export default function TabPanel({
           />
         </div>
         <div className="archiveGrid">
-          {visibleVideos.map((video) => {
+          {displayedVideos.map((video) => {
             const isPlaying = selectedVideoId === video.id;
             const canPlay = !isLive && Boolean(onSelectArchive);
 
