@@ -474,11 +474,10 @@ button:focus-visible {
   min-width: 0;
   max-width: 100%;
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(max-content, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(8.25rem, 1fr));
   align-items: end;
   gap: 0.35rem;
-  overflow-x: auto;
+  overflow-x: visible;
   padding: 0.65rem 0.65rem 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background:
@@ -497,6 +496,7 @@ button:focus-visible {
 
 .tabButton {
   position: relative;
+  width: 100%;
   min-width: 118px;
   min-height: 3rem;
   padding: 0.82rem 1.05rem;
@@ -2040,6 +2040,17 @@ button:focus-visible {
 
   .sortButton {
     flex: 1;
+  }
+
+  .tabList {
+    gap: 0.45rem;
+    padding-inline: 0.55rem;
+  }
+
+  .tabButton {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 0.7rem;
   }
 
   .tabButton.active {
