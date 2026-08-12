@@ -2045,4 +2045,9 @@ button:focus-visible {
   .tabButton.active {
     transform: none;
   }
+
+  .playingBadge {
+    width: 100%;
+    transform: none;
+  }
 }
