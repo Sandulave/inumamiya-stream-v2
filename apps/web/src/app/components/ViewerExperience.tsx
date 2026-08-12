@@ -77,19 +77,11 @@ export default function ViewerExperience({
   const [selectedContent, setSelectedContent] = useState<SelectedContent>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
 
-  const effectiveParentHost = useMemo(() => {
-    if (typeof window !== 'undefined' && parentHost === 'localhost') {
-      return window.location.hostname;
-    }
-
-    return parentHost;
-  }, [parentHost]);
-
   const liveIframeSrc = useMemo(() => {
-    const parentParam = `parent=${encodeURIComponent(effectiveParentHost)}`;
+    const parentParam = `parent=${encodeURIComponent(parentHost)}`;
 
     return `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&${parentParam}&autoplay=false`;
-  }, [channel, effectiveParentHost]);
+  }, [channel, parentHost]);
 
   const embeddedContent = useMemo(() => {
     if (isLive) return null;
@@ -113,11 +105,11 @@ export default function ViewerExperience({
     if (!embeddedContent) return null;
 
     if (embeddedContent.type === 'vod') {
-      return buildVodIframeSrc(embeddedContent.id, effectiveParentHost);
+      return buildVodIframeSrc(embeddedContent.id, parentHost);
     }
 
     return buildPlayerRoute(embeddedContent.type, embeddedContent.id);
-  }, [effectiveParentHost, embeddedContent]);
+  }, [parentHost, embeddedContent]);
 
   const handleSelectArchive = useCallback((videoId: string) => {
     setSelectedContent({ type: 'vod', id: videoId });
@@ -161,8 +153,8 @@ export default function ViewerExperience({
           rel="noreferrer noopener"
           className="subscribeButton"
         >
-          <span className="subscribeIcon" aria-hidden="true">★</span>
-          サブスクする
+          <span className="subscribeIcon" aria-hidden="true">{"\u2605"}</span>
+          {"\u30b5\u30d6\u30b9\u30af\u3059\u308b"}
         </a>
       </div>
 

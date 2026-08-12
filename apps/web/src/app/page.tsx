@@ -1,4 +1,5 @@
-﻿import ProfileSlider from './components/ProfileSlider';
+import { headers } from 'next/headers';
+import ProfileSlider from './components/ProfileSlider';
 import ViewerExperience from './components/ViewerExperience';
 
 type TwitchUser = {
@@ -68,7 +69,29 @@ type TwitchVideoListResponse = {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const TWITCH_CHANNEL = 'inumamiya';
-const TWITCH_PARENT_HOST = process.env.NEXT_PUBLIC_TWITCH_PARENT_HOST ?? 'localhost';
+
+function normalizeHostname(host: string | null) {
+  const firstHost = (host ?? 'localhost').split(',')[0].trim();
+
+  if (firstHost.startsWith('[')) {
+    const closingBracketIndex = firstHost.indexOf(']');
+    return closingBracketIndex > 0
+      ? firstHost.slice(1, closingBracketIndex)
+      : 'localhost';
+  }
+
+  return firstHost.split(':')[0] || 'localhost';
+}
+
+async function getRequestHostname() {
+  const requestHeaders = await headers();
+  const host =
+    requestHeaders.get('x-forwarded-host') ??
+    requestHeaders.get('host') ??
+    'localhost';
+
+  return normalizeHostname(host);
+}
 
 async function fetchTwitchData(login: string): Promise<TwitchPageData> {
   const userRequest = fetch(`${API_BASE_URL}/twitch/users/${login}`, {
@@ -171,7 +194,8 @@ function ProfileGallerySection({ initialImage }: { initialImage?: string }) {
 }
 
 export default async function Home() {
-  const [{ user, stream, errorMessage }, clipData, videoData] = await Promise.all([
+  const [parentHost, { user, stream, errorMessage }, clipData, videoData] = await Promise.all([
+    getRequestHostname(),
     fetchTwitchData('inumamiya'),
     fetchTwitchClips('inumamiya'),
     fetchTwitchVideos('inumamiya'),
@@ -180,7 +204,7 @@ export default async function Home() {
 
   const chatSrc = `https://www.twitch.tv/embed/${encodeURIComponent(
     TWITCH_CHANNEL,
-  )}/chat?parent=${encodeURIComponent(TWITCH_PARENT_HOST)}`;
+  )}/chat?parent=${encodeURIComponent(parentHost)}`;
 
   return (
     <main className="page">
@@ -232,7 +256,7 @@ export default async function Home() {
         <div className="viewerMain">
             <ViewerExperience
               channel={TWITCH_CHANNEL}
-              parentHost={TWITCH_PARENT_HOST}
+              parentHost={parentHost}
               isLive={stream?.isLive ?? false}
               userLogin={user?.login ?? TWITCH_CHANNEL}
               clips={clipData?.clips ?? null}

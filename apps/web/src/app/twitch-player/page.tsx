@@ -34,6 +34,19 @@ function buildTwitchSrc(type: PlayerType, id: string, hostname: string) {
   return `https://clips.twitch.tv/embed?clip=${encodeURIComponent(id)}&${parentParam}&autoplay=true&muted=false`;
 }
 
+function normalizeHostname(host: string | null) {
+  const firstHost = (host ?? 'localhost').split(',')[0].trim();
+
+  if (firstHost.startsWith('[')) {
+    const closingBracketIndex = firstHost.indexOf(']');
+    return closingBracketIndex > 0
+      ? firstHost.slice(1, closingBracketIndex)
+      : 'localhost';
+  }
+
+  return firstHost.split(':')[0] || 'localhost';
+}
+
 export default async function TwitchPlayerPage({ searchParams }: Props) {
   const [{ type, id }, requestHeaders] = await Promise.all([
     searchParams,
@@ -48,8 +61,11 @@ export default async function TwitchPlayerPage({ searchParams }: Props) {
     );
   }
 
-  const host = requestHeaders.get('host') ?? 'localhost';
-  const hostname = host.split(':')[0];
+  const host =
+    requestHeaders.get('x-forwarded-host') ??
+    requestHeaders.get('host') ??
+    'localhost';
+  const hostname = normalizeHostname(host);
   const iframeSrc = buildTwitchSrc(type, id, hostname);
 
   return (
