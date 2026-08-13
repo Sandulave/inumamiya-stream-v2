@@ -75,13 +75,16 @@ export default function ViewerExperience({
   }, [videos]);
 
   const [selectedContent, setSelectedContent] = useState<SelectedContent>(null);
+  const [livePlayerNonce, setLivePlayerNonce] = useState(0);
+  const [liveAutoplay, setLiveAutoplay] = useState(false);
   const playerRef = useRef<HTMLDivElement | null>(null);
 
   const liveIframeSrc = useMemo(() => {
     const parentParam = `parent=${encodeURIComponent(parentHost)}`;
+    const autoplayParam = `autoplay=${liveAutoplay ? 'true' : 'false'}`;
 
-    return `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&${parentParam}&autoplay=false`;
-  }, [channel, parentHost]);
+    return `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&${parentParam}&${autoplayParam}`;
+  }, [channel, liveAutoplay, parentHost]);
 
   const embeddedContent = useMemo(() => {
     if (selectedContent?.type === 'clip') {
@@ -92,12 +95,12 @@ export default function ViewerExperience({
       return selectedContent;
     }
 
-    if (latestVideoId) {
+    if (!isLive && latestVideoId) {
       return { type: 'vod', id: latestVideoId } as const;
     }
 
     return null;
-  }, [latestVideoId, selectedContent]);
+  }, [isLive, latestVideoId, selectedContent]);
 
   const embeddedPlayerSrc = useMemo(() => {
     if (!embeddedContent) return null;
@@ -119,6 +122,13 @@ export default function ViewerExperience({
     playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  const handleSelectLive = useCallback(() => {
+    setSelectedContent(null);
+    setLiveAutoplay(true);
+    setLivePlayerNonce((current) => current + 1);
+    playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
   return (
     <>
       <div className="playerWrapper" ref={playerRef}>
@@ -134,7 +144,7 @@ export default function ViewerExperience({
           />
         ) : (
           <iframe
-            key={`live-${channel}`}
+            key={`live-${channel}-${livePlayerNonce}`}
             src={liveIframeSrc}
             title="Twitch Live Player"
             allow="autoplay; fullscreen"
@@ -154,6 +164,15 @@ export default function ViewerExperience({
           <span className="subscribeIcon" aria-hidden="true">{"\u2605"}</span>
           {"\u30b5\u30d6\u30b9\u30af\u3059\u308b"}
         </a>
+        {isLive ? (
+          <button
+            type="button"
+            className="liveWatchButton"
+            onClick={handleSelectLive}
+          >
+            {"\u914d\u4fe1\u3092\u898b\u308b"}
+          </button>
+        ) : null}
       </div>
 
       <TabPanel
