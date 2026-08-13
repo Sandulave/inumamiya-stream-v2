@@ -84,8 +84,6 @@ export default function ViewerExperience({
   }, [channel, parentHost]);
 
   const embeddedContent = useMemo(() => {
-    if (isLive) return null;
-
     if (selectedContent?.type === 'clip') {
       return selectedContent;
     }
@@ -99,7 +97,7 @@ export default function ViewerExperience({
     }
 
     return null;
-  }, [isLive, latestVideoId, selectedContent]);
+  }, [latestVideoId, selectedContent]);
 
   const embeddedPlayerSrc = useMemo(() => {
     if (!embeddedContent) return null;
@@ -162,7 +160,6 @@ export default function ViewerExperience({
         clips={clips}
         videos={videos}
         login={userLogin}
-        isLive={isLive}
         initialClipCursor={initialClipCursor}
         initialVideoCursor={initialVideoCursor}
         selectedVideoId={

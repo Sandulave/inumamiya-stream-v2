@@ -29,7 +29,6 @@ type Props = {
   clips: TwitchClip[] | null;
   videos: TwitchVideo[] | null;
   login: string;
-  isLive: boolean;
   initialClipCursor?: string;
   initialVideoCursor?: string;
   selectedVideoId?: string | null;
@@ -347,7 +346,6 @@ export default function TabPanel({
   clips,
   videos,
   login,
-  isLive,
   initialClipCursor,
   initialVideoCursor,
   selectedVideoId,
@@ -631,7 +629,7 @@ export default function TabPanel({
         <div className="archiveGrid">
           {displayedVideos.map((video) => {
             const isPlaying = selectedVideoId === video.id;
-            const canPlay = !isLive && Boolean(onSelectArchive);
+            const canPlay = Boolean(onSelectArchive);
 
             return (
               <article
@@ -700,7 +698,7 @@ export default function TabPanel({
         <div className="clipGrid">
           {visibleClips.map((clip) => {
             const isPlaying = selectedClipId === clip.id;
-            const canPlay = !isLive && Boolean(onSelectClip);
+            const canPlay = Boolean(onSelectClip);
 
             return (
               <article
