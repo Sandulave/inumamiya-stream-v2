@@ -2,6 +2,13 @@ node_modules/
 dist/
 coverage/
 *.log
+tools/highlight-worker-temp/
+tools/highlight-analyzer/.venv/
+tools/highlight-analyzer/__pycache__/
+tools/highlight-analyzer/output/*
+!tools/highlight-analyzer/output/.gitkeep
+tools/highlight-analyzer/config.json
+tools/TwitchDownloader/
 
 .env
 .env.*

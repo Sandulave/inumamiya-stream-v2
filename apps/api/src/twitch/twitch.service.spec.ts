@@ -246,6 +246,99 @@ describe('TwitchService', () => {
     ).rejects.toThrow('Invalid clip cursor');
   });
 
+  it('should fetch all broadcaster clips across pages for highlight matching', async () => {
+    mockUserAndToken();
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: 'clip1',
+            url: 'https://clips.twitch.tv/clip1',
+            embed_url: 'https://clips.twitch.tv/embed?clip=clip1',
+            broadcaster_id: 'user-id',
+            broadcaster_name: 'いぬまみや',
+            creator_id: 'creator1',
+            creator_name: 'creator1',
+            video_id: '2845096588',
+            title: 'clip1',
+            view_count: 10,
+            created_at: '2026-08-13T00:00:00Z',
+            thumbnail_url: 'https://example.com/clip1.jpg',
+            duration: 30,
+            vod_offset: 100,
+            is_featured: false,
+          },
+        ],
+        pagination: { cursor: 'next-page' },
+      }),
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: 'clip2',
+            url: 'https://clips.twitch.tv/clip2',
+            embed_url: 'https://clips.twitch.tv/embed?clip=clip2',
+            broadcaster_id: 'user-id',
+            broadcaster_name: 'いぬまみや',
+            creator_id: 'creator2',
+            creator_name: 'creator2',
+            video_id: '2845096588',
+            title: 'clip2',
+            view_count: 20,
+            created_at: '2026-08-13T00:01:00Z',
+            thumbnail_url: 'https://example.com/clip2.jpg',
+            duration: 45,
+            vod_offset: 200,
+            is_featured: true,
+          },
+        ],
+        pagination: {},
+      }),
+    });
+
+    const result = await service.getAllClipsByLogin('inumamiya');
+    const firstUrl = new URL(fetchMock.mock.calls[0][0] as string);
+    const secondUrl = new URL(fetchMock.mock.calls[1][0] as string);
+
+    expect(firstUrl.searchParams.get('broadcaster_id')).toBe('user-id');
+    expect(firstUrl.searchParams.get('first')).toBe('100');
+    expect(firstUrl.searchParams.get('after')).toBeNull();
+    expect(secondUrl.searchParams.get('after')).toBe('next-page');
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'clip1',
+        embedUrl: 'https://clips.twitch.tv/embed?clip=clip1',
+        videoId: '2845096588',
+        vodOffset: 100,
+        isFeatured: false,
+      }),
+      expect.objectContaining({
+        id: 'clip2',
+        videoId: '2845096588',
+        vodOffset: 200,
+        isFeatured: true,
+      }),
+    ]);
+  });
+
+  it('should stop all-clips pagination at the safety page limit', async () => {
+    mockUserAndToken();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [],
+        pagination: { cursor: 'still-more' },
+      }),
+    });
+
+    await service.getAllClipsByLogin('inumamiya', 10);
+
+    expect(fetchMock).toHaveBeenCalledTimes(10);
+  });
+
   it('should pass first and after to Twitch videos request and return pagination', async () => {
     mockUserAndToken();
     fetchMock.mockResolvedValue({
@@ -292,5 +385,91 @@ describe('TwitchService', () => {
     expect(requestedUrl.searchParams.get('sort')).toBe('views');
     expect(result.sort).toBe('views');
     expect(result.pagination.cursor).toBe('next-videos');
+  });
+
+  it('should fetch all archive videos across Twitch pagination pages', async () => {
+    mockUserAndToken();
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: 'video1',
+            stream_id: 'stream1',
+            user_id: 'user-id',
+            user_login: 'inumamiya',
+            user_name: 'いぬまみや',
+            title: 'newer',
+            description: '',
+            created_at: '2026-08-15T00:00:00Z',
+            published_at: '2026-08-15T00:00:00Z',
+            url: '',
+            thumbnail_url: '',
+            view_count: 10,
+            language: 'ja',
+            type: 'archive',
+            duration: '1h',
+          },
+        ],
+        pagination: { cursor: 'next-videos' },
+      }),
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: 'video2',
+            stream_id: 'stream2',
+            user_id: 'user-id',
+            user_login: 'inumamiya',
+            user_name: 'いぬまみや',
+            title: 'older',
+            description: '',
+            created_at: '2026-08-14T00:00:00Z',
+            published_at: '2026-08-14T00:00:00Z',
+            url: '',
+            thumbnail_url: '',
+            view_count: 5,
+            language: 'ja',
+            type: 'archive',
+            duration: '1h',
+          },
+        ],
+        pagination: {},
+      }),
+    });
+
+    const result = await service.getAllArchiveVideosByLogin('inumamiya');
+    const firstUrl = new URL(fetchMock.mock.calls[0][0] as string);
+    const secondUrl = new URL(fetchMock.mock.calls[1][0] as string);
+
+    expect(firstUrl.searchParams.get('first')).toBe('100');
+    expect(firstUrl.searchParams.get('type')).toBe('archive');
+    expect(firstUrl.searchParams.get('sort')).toBe('time');
+    expect(firstUrl.searchParams.get('after')).toBeNull();
+    expect(secondUrl.searchParams.get('after')).toBe('next-videos');
+    expect(result.map((video) => video.id)).toEqual(['video1', 'video2']);
+    expect(result[0]).toMatchObject({
+      id: 'video1',
+      streamId: 'stream1',
+      userLogin: 'inumamiya',
+      createdAt: '2026-08-15T00:00:00Z',
+    });
+  });
+
+  it('should stop archive pagination when Twitch repeats a cursor', async () => {
+    mockUserAndToken();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [],
+        pagination: { cursor: 'same-cursor' },
+      }),
+    });
+
+    await expect(service.getAllArchiveVideosByLogin('inumamiya')).rejects.toThrow(
+      'Twitch archive pagination cursor repeated',
+    );
   });
 });

@@ -5,5 +5,6 @@ import { TwitchController } from './twitch.controller';
 @Module({
   providers: [TwitchService],
   controllers: [TwitchController],
+  exports: [TwitchService],
 })
 export class TwitchModule {}

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import TabPanel from './TabPanel';
+import TwitchPlayerFrame from './TwitchPlayerFrame';
 
 type TwitchClip = {
   id: string;
@@ -53,12 +54,6 @@ function buildPlayerRoute(type: 'vod' | 'clip', id: string) {
   return `/twitch-player?${params.toString()}`;
 }
 
-function buildVodIframeSrc(videoId: string, parentHost: string) {
-  const parentParam = `parent=${encodeURIComponent(parentHost)}`;
-
-  return `https://player.twitch.tv/?video=v${encodeURIComponent(videoId)}&${parentParam}&autoplay=true&muted=false`;
-}
-
 export default function ViewerExperience({
   channel,
   parentHost,
@@ -102,16 +97,6 @@ export default function ViewerExperience({
     return null;
   }, [isLive, latestVideoId, selectedContent]);
 
-  const embeddedPlayerSrc = useMemo(() => {
-    if (!embeddedContent) return null;
-
-    if (embeddedContent.type === 'vod') {
-      return buildVodIframeSrc(embeddedContent.id, parentHost);
-    }
-
-    return buildPlayerRoute(embeddedContent.type, embeddedContent.id);
-  }, [parentHost, embeddedContent]);
-
   const handleSelectArchive = useCallback((videoId: string) => {
     setSelectedContent({ type: 'vod', id: videoId });
     playerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -132,16 +117,26 @@ export default function ViewerExperience({
   return (
     <>
       <div className="playerWrapper" ref={playerRef}>
-        {embeddedContent && embeddedPlayerSrc ? (
-          <iframe
-            key={`${embeddedContent.type}-${embeddedContent.id}`}
-            src={embeddedPlayerSrc}
-            title="Twitch Player"
-            allow="autoplay; fullscreen"
-            allowFullScreen
-            frameBorder="0"
-            scrolling="no"
-          />
+        {embeddedContent ? (
+          embeddedContent.type === 'vod' ? (
+            <TwitchPlayerFrame
+              key={`${embeddedContent.type}-${embeddedContent.id}`}
+              type="vod"
+              id={embeddedContent.id}
+              parentHost={parentHost}
+              title="Twitch Player"
+            />
+          ) : (
+            <iframe
+              key={`${embeddedContent.type}-${embeddedContent.id}`}
+              src={buildPlayerRoute(embeddedContent.type, embeddedContent.id)}
+              title="Twitch Player"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+              frameBorder="0"
+              scrolling="no"
+            />
+          )
         ) : (
           <iframe
             key={`live-${channel}-${livePlayerNonce}`}

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 type TwitchTokenResponse = {
@@ -58,6 +62,9 @@ type TwitchClip = {
   view_count: number;
   created_at: string;
   thumbnail_url: string;
+  duration: number;
+  vod_offset: number | null;
+  is_featured: boolean;
 };
 
 type TwitchClipsResponse = {
@@ -83,7 +90,9 @@ type ClipCursor =
 
 type TwitchVideo = {
   id: string;
+  stream_id?: string;
   user_id: string;
+  user_login?: string;
   user_name: string;
   title: string;
   description: string;
@@ -113,14 +122,64 @@ type TwitchPaginatedResult<T> = {
   sort?: SortMode;
 };
 
+export type AppTwitchClip = {
+  id: string;
+  url: string;
+  embedUrl: string;
+  broadcasterId: string;
+  broadcasterName: string;
+  creatorId: string;
+  creatorName: string;
+  videoId: string;
+  title: string;
+  viewCount: number;
+  createdAt: string;
+  thumbnailUrl: string;
+  duration: number;
+  vodOffset: number | null;
+  isFeatured: boolean;
+};
+
+export type AppTwitchVideo = {
+  id: string;
+  streamId?: string;
+  userId: string;
+  userLogin?: string;
+  userName: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  publishedAt: string;
+  url: string;
+  thumbnailUrl: string;
+  viewCount: number;
+  language: string;
+  type: string;
+  duration: string;
+};
+
 @Injectable()
 export class TwitchService {
   private readonly latestClipWindowMs = 30 * 24 * 60 * 60 * 1000;
   private readonly maxLatestClipWindows = 24;
+  private readonly maxClipPages = 10;
+  private readonly clipsCacheTtlMs = 10 * 60 * 1000;
+  private appAccessTokenCache: { token: string; expiresAtMs: number } | null = null;
+  private readonly allClipsByLoginCache = new Map<
+    string,
+    { expiresAtMs: number; clips: AppTwitchClip[] }
+  >();
 
   constructor(private readonly configService: ConfigService) {}
 
   async getAppAccessToken(): Promise<string> {
+    if (
+      this.appAccessTokenCache &&
+      this.appAccessTokenCache.expiresAtMs > Date.now()
+    ) {
+      return this.appAccessTokenCache.token;
+    }
+
     const clientId = this.configService.get<string>('TWITCH_CLIENT_ID');
 
     const clientSecret = this.configService.get<string>('TWITCH_CLIENT_SECRET');
@@ -148,6 +207,10 @@ export class TwitchService {
     }
 
     const data = (await response.json()) as TwitchTokenResponse;
+    this.appAccessTokenCache = {
+      token: data.access_token,
+      expiresAtMs: Date.now() + Math.max(data.expires_in - 60, 0) * 1000,
+    };
 
     return data.access_token;
   }
@@ -283,6 +346,74 @@ export class TwitchService {
     };
   }
 
+  async getAllClipsByLogin(
+    login: string,
+    maxPages = this.maxClipPages,
+  ): Promise<AppTwitchClip[]> {
+    const cacheKey = `${login.toLowerCase()}:${maxPages}`;
+    const cached = this.allClipsByLoginCache.get(cacheKey);
+
+    if (cached && cached.expiresAtMs > Date.now()) {
+      return cached.clips;
+    }
+
+    const user = await this.getUserByLogin(login);
+
+    if (!user) {
+      throw new Error('Twitchユーザーが見つかりません');
+    }
+
+    const clientId = this.configService.get<string>('TWITCH_CLIENT_ID');
+
+    if (!clientId) {
+      throw new Error('Twitch Client ID が未設定です');
+    }
+
+    const accessToken = await this.getAppAccessToken();
+    const clips: AppTwitchClip[] = [];
+    let after: string | undefined;
+    let pageCount = 0;
+
+    do {
+      const params = new URLSearchParams({
+        broadcaster_id: user.id,
+        first: '100',
+      });
+
+      if (after) {
+        params.set('after', after);
+      }
+
+      const response = await fetch(
+        `https://api.twitch.tv/helix/clips?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Client-Id': clientId,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        throw new BadGatewayException(
+          `Twitch clips request failed: ${response.status}`,
+        );
+      }
+
+      const data = (await response.json()) as TwitchClipsResponse;
+      clips.push(...data.data.map((clip) => this.mapTwitchClip(clip)));
+      after = data.pagination?.cursor;
+      pageCount += 1;
+    } while (after && pageCount < maxPages);
+
+    this.allClipsByLoginCache.set(cacheKey, {
+      expiresAtMs: Date.now() + this.clipsCacheTtlMs,
+      clips,
+    });
+
+    return clips;
+  }
+
   private async getLatestClips(
     broadcasterId: string,
     accessToken: string,
@@ -402,6 +533,26 @@ export class TwitchService {
     });
   }
 
+  private mapTwitchClip(clip: TwitchClip): AppTwitchClip {
+    return {
+      id: clip.id,
+      url: clip.url,
+      embedUrl: clip.embed_url,
+      broadcasterId: clip.broadcaster_id,
+      broadcasterName: clip.broadcaster_name,
+      creatorId: clip.creator_id,
+      creatorName: clip.creator_name,
+      videoId: clip.video_id,
+      title: clip.title,
+      viewCount: clip.view_count,
+      createdAt: clip.created_at,
+      thumbnailUrl: clip.thumbnail_url,
+      duration: clip.duration,
+      vodOffset: clip.vod_offset,
+      isFeatured: clip.is_featured,
+    };
+  }
+
   private encodeClipCursor(cursor: ClipCursor) {
     return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
   }
@@ -487,6 +638,108 @@ export class TwitchService {
       },
       hasMore: Boolean(data.pagination?.cursor),
       sort,
+    };
+  }
+
+  async getArchiveVideosByLogin(
+    login: string,
+    limit = 1,
+  ): Promise<AppTwitchVideo[]> {
+    const result = await this.getVideosByLogin(login, limit, undefined, 'latest');
+
+    return result.data.map((video) => this.mapTwitchVideo(video));
+  }
+
+  async getAllArchiveVideosByLogin(login: string): Promise<AppTwitchVideo[]> {
+    const user = await this.getUserByLogin(login);
+
+    if (!user) {
+      throw new Error('Twitchユーザーが見つかりません');
+    }
+
+    const clientId = this.configService.get<string>('TWITCH_CLIENT_ID');
+
+    if (!clientId) {
+      throw new Error('Twitch Client ID が未設定です');
+    }
+
+    const accessToken = await this.getAppAccessToken();
+    const videos: TwitchVideo[] = [];
+    const seenCursors = new Set<string>();
+    let after: string | undefined;
+
+    do {
+      const params = new URLSearchParams({
+        user_id: user.id,
+        first: '100',
+        type: 'archive',
+        sort: 'time',
+      });
+
+      if (after) {
+        params.set('after', after);
+      }
+
+      const response = await fetch(
+        `https://api.twitch.tv/helix/videos?${params.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Client-Id': clientId,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(
+          `Twitch archive videos request failed: ${response.status} - ${errorBody}`,
+        );
+      }
+
+      const data = (await response.json()) as TwitchVideosResponse;
+      videos.push(...data.data);
+
+      const nextCursor = data.pagination?.cursor;
+
+      if (nextCursor && seenCursors.has(nextCursor)) {
+        throw new Error(
+          `Twitch archive pagination cursor repeated: ${nextCursor}`,
+        );
+      }
+
+      if (nextCursor) {
+        seenCursors.add(nextCursor);
+      }
+
+      after = nextCursor;
+    } while (after);
+
+    return videos
+      .map((video) => this.mapTwitchVideo(video))
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+  }
+
+  private mapTwitchVideo(video: TwitchVideo): AppTwitchVideo {
+    return {
+      id: video.id,
+      streamId: video.stream_id,
+      userId: video.user_id,
+      userLogin: video.user_login,
+      userName: video.user_name,
+      title: video.title,
+      description: video.description,
+      createdAt: video.created_at,
+      publishedAt: video.published_at,
+      url: video.url,
+      thumbnailUrl: video.thumbnail_url,
+      viewCount: video.view_count,
+      language: video.language,
+      type: video.type,
+      duration: video.duration,
     };
   }
 }

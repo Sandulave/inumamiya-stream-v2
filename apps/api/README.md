@@ -96,3 +96,159 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+# Highlight Worker
+
+Twitch VODの見どころ解析は、サーバー定期WorkerとローカルPC用の全件再解析でコマンドを分けています。
+
+## Server
+
+```powershell
+pnpm --filter api highlight:worker
+pnpm --filter api highlight:worker -- --dry-run
+```
+
+本番サーバーの定期実行用です。毎回Twitch上に現在存在するarchiveを全ページ取得し、obsolete JSONを同期したうえで、最新の未解析VODを最大1件だけ解析して終了します。
+
+```text
+Twitch archive一覧取得
+↓
+obsolete JSON同期
+↓
+解析済み判定
+↓
+最新の未解析VODを最大1件だけ解析
+↓
+終了
+```
+
+未解析VODが複数ある場合も、1回のrunでは最新1件だけ処理します。次回runで次の未解析VODを処理します。未解析が0件なら `No analysis required.` として正常終了します。
+
+`--dry-run` はarchive取得、解析済み判定、obsolete検出、次の対象表示だけを行い、download / chat download / analyzer / finalize / obsolete削除は実行しません。
+
+build後に実行する場合:
+
+```powershell
+pnpm --filter api build
+pnpm --filter api highlight:worker:prod
+```
+
+## Local PC
+
+採点アルゴリズム、candidate抽出、merge方法などを変更したあとに、現在Twitch上に存在する全archiveをローカルPCで強制的に再解析するためのコマンドです。
+
+```powershell
+pnpm --filter api highlight:reanalyze-all
+pnpm --filter api highlight:reanalyze-all -- --dry-run
+```
+
+試験用に先頭N件だけ再解析する場合:
+
+```powershell
+pnpm --filter api highlight:reanalyze-all -- --max-vods 2
+```
+
+`highlight:reanalyze-all` は、既存の `tools/highlight-analyzer/output/<vodId>.json` が存在していてもskipせず、createdAtの新しい順に1本ずつ逐次処理します。並列処理はしません。
+
+処理フローはserver/localで共通です。
+
+```text
+TwitchDownloaderCLI videodownload
+↓
+TwitchDownloaderCLI chatdownload
+↓
+tools/highlight-analyzer/analyze.py
+↓
+tools/highlight-analyzer/output/<vodId>.json へ保存
+↓
+成功時のみ一時ファイル削除
+```
+
+再解析時も既存JSONは解析開始前に削除しません。`analyze.py` が新しい `output/highlights.json` を生成し、`vodId` と `momentCandidates` のvalidationに成功した場合だけ、`output/<vodId>.json.tmp` を経由してatomic replaceします。再解析に失敗したVODは以前の `<vodId>.json` を維持し、tempを残して次回resumeできるようにします。
+
+出力先:
+
+```text
+tools/highlight-analyzer/output/
+  <vodId>.json
+  <vodId>.json
+  ...
+```
+
+一時出力の `output/highlights.json` は各VOD処理ごとに `output/<vodId>.json` へ変換されます。
+
+workerは1本ずつ逐次処理します。local reanalyze-allでは1件失敗しても残りのVODは可能な限り処理し、最後にsummaryを表示します。失敗が1件以上あった場合はexit code 1になります。
+
+多重起動防止:
+
+```text
+tools/highlight-worker-temp/.worker.lock
+```
+
+実行中workerのPIDが生存している場合、lock ageだけではstale扱いしません。worker稼働中はheartbeatでlockを更新します。
+
+serverで処理対象がない場合:
+
+```text
+Twitch archives: 14
+Unanalyzed: 0
+
+New unanalyzed archive: 0
+No analysis required.
+```
+
+archiveが0件の場合も正常終了します。
+
+Resume:
+
+```text
+tools/highlight-worker-temp/<vodId>/video.mp4  が存在しsize > 0 → video download skip
+tools/highlight-worker-temp/<vodId>/chat.json  がvalid JSON     → chat download skip
+```
+
+途中失敗時は再試行しやすいよう一時ファイルを残します。成功して `<vodId>.json` の保存まで完了した場合のみ削除します。
+
+Archive同期:
+
+WorkerはTwitch archive一覧を全ページ正常取得できた場合だけ、現在Twitch上に存在しないVODのfinal JSONを削除します。
+
+削除対象は `tools/highlight-analyzer/output/` の `^\d+\.json$` に一致するVOD用JSONだけです。`highlights.json`、`timeline.csv`、`timeline.png`、数字以外のJSONは削除しません。
+
+```text
+Twitch:
+  123
+  456
+
+output:
+  123.json
+  456.json
+  789.json
+
+=> 789.json をobsoleteとして削除
+```
+
+`--dry-run` では削除予定だけを表示し、実ファイルは変更しません。Twitch archive取得が失敗した場合は、obsolete削除処理自体を実行しません。
+
+安全策として、Twitch archiveが正常に0件取得された一方でlocal VOD JSONが存在する場合は、自動全削除せずwarningとして停止します。
+
+旧 `--all-existing` option はありません。serverは最新の未解析VODを最大1件だけ処理し、全件再解析は `highlight:reanalyze-all` で明示的に実行します。
+
+必要なenv:
+
+- `TWITCH_CLIENT_ID`
+- `TWITCH_CLIENT_SECRET`
+- `TWITCH_DOWNLOADER_CLI`: 例 `C:\tools\TwitchDownloaderCLI.exe`。未指定時はPATH上の `TwitchDownloaderCLI.exe` / `TwitchDownloaderCLI` を使います。
+
+optional env:
+
+- `HIGHLIGHT_ANALYZER_PYTHON`: analyzer実行に使うPython。未指定時は `tools/highlight-analyzer/.venv`、Windowsの `py`、それ以外の `python3` の順に探します。
+- `HIGHLIGHT_WORKER_TEMP_DIR`: 一時download先。defaultは `tools/highlight-worker-temp`。
+- `HIGHLIGHT_WORKER_LOCK_MAX_AGE_HOURS`: worker lockのstale判定時間。defaultは `12`。
+- `HIGHLIGHT_VOD_QUALITY`: 指定時のみ `videodownload --quality` へ渡します。
+- `FFMPEG_PATH`: 指定時のみ子processの環境変数へ渡します。
+
+一時ファイル:
+
+- `tools/highlight-worker-temp/<vodId>/video.mp4`
+- `tools/highlight-worker-temp/<vodId>/chat.json`
+
+途中失敗時は再試行しやすいよう一時ファイルを残します。成功して `<vodId>.json` の保存まで完了した場合のみ削除します。

@@ -2,6 +2,7 @@
 
 import { KeyboardEvent, ReactNode, useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { games, pcSpecs, profileLinks, qrLinks } from '../../data/streamerData';
 
 type TwitchClip = {
@@ -658,11 +659,20 @@ export default function TabPanel({
                     <p className="clipMeta">再生数: {video.view_count} 回</p>
                   </div>
                 </div>
-                {isPlaying ? (
-                  <div className="archiveActions">
+                <div className="archiveActions">
+                  {isPlaying ? (
                     <span className="playingBadge">再生中</span>
-                  </div>
-                ) : null}
+                  ) : null}
+                  <Link
+                    href={`/archives/${encodeURIComponent(video.id)}/highlights`}
+                    className="highlightExploreLink"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <span aria-hidden="true">✨</span>
+                    見どころ探索
+                  </Link>
+                </div>
               </article>
             );
           })}

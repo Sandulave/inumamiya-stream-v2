@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { buildTwitchPlayerSrc } from '../components/TwitchPlayerFrame';
 
 type PlayerType = 'vod' | 'clip';
 
@@ -21,17 +22,6 @@ function isValidPlayerId(type: PlayerType, id: string | undefined) {
   }
 
   return /^[A-Za-z0-9_-]+$/.test(id);
-}
-
-function buildTwitchSrc(type: PlayerType, id: string, hostname: string) {
-  const parentParam = `parent=${encodeURIComponent(hostname)}`;
-
-  // Twitch/browser autoplay is best-effort; the embedded player may still require user interaction.
-  if (type === 'vod') {
-    return `https://player.twitch.tv/?video=v${encodeURIComponent(id)}&${parentParam}&autoplay=true&muted=false`;
-  }
-
-  return `https://clips.twitch.tv/embed?clip=${encodeURIComponent(id)}&${parentParam}&autoplay=true&muted=false`;
 }
 
 function normalizeHostname(host: string | null) {
@@ -66,7 +56,11 @@ export default async function TwitchPlayerPage({ searchParams }: Props) {
     requestHeaders.get('host') ??
     'localhost';
   const hostname = normalizeHostname(host);
-  const iframeSrc = buildTwitchSrc(type, id, hostname);
+  const iframeSrc = buildTwitchPlayerSrc({
+    type,
+    id,
+    parentHost: hostname,
+  });
 
   return (
     <main
