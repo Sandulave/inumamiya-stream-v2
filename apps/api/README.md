@@ -246,6 +246,38 @@ optional env:
 - `HIGHLIGHT_VOD_QUALITY`: 指定時のみ `videodownload --quality` へ渡します。
 - `FFMPEG_PATH`: 指定時のみ子processの環境変数へ渡します。
 
+## Cloudflare R2
+
+Cloudflare R2を使う場合、解析結果JSONはprivate bucketのS3互換APIへ保存します。VercelやブラウザからR2へ直接アクセスせず、NestJS APIがR2から読み込んで既存の `/highlights/vods/:vodId/moments` として返します。
+
+R2 object key:
+
+```text
+highlights/<vodId>/result.json
+```
+
+将来thumbnailを追加する場合は、同じprefix配下の `highlights/<vodId>/thumbnails/<timestamp>.webp` を使う想定です。
+
+R2を有効にするenv:
+
+```text
+R2_ENDPOINT=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+```
+
+4つすべてが設定されている場合のみR2を使用します。4つすべて未設定ならローカルの `tools/highlight-analyzer/output/<vodId>.json` を使用します。一部だけ設定されている場合は設定ミスとしてエラーになります。
+
+ローカル解析済みJSONをR2へ初期投入する場合:
+
+```powershell
+pnpm --filter api highlight:r2-upload -- --dry-run
+pnpm --filter api highlight:r2-upload
+```
+
+`--dry-run` はローカルJSONの検証とupload対象表示だけを行い、R2へは書き込みません。通常実行では `tools/highlight-analyzer/output/<numericVodId>.json` のうち、JSON parse、`vodId`一致、`momentCandidates` validationに成功したものを `highlights/<vodId>/result.json` へ上書きuploadします。
+
 一時ファイル:
 
 - `tools/highlight-worker-temp/<vodId>/video.mp4`

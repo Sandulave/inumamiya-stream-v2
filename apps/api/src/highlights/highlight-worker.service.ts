@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'child_process';
-import { constants } from 'fs';
+import { constants, Dirent } from 'fs';
 import { accessSync } from 'fs';
 import {
   access,
@@ -17,6 +17,7 @@ import {
 } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { AppTwitchVideo, TwitchService } from '../twitch/twitch.service';
+import { HighlightStorageService } from './highlight-storage.service';
 
 const WORKER_LOGIN = 'inumamiya';
 const DEFAULT_LOCK_MAX_AGE_HOURS = 12;
@@ -60,6 +61,7 @@ export class HighlightWorkerService {
   constructor(
     private readonly configService: ConfigService,
     private readonly twitchService: TwitchService,
+    private readonly storageService: HighlightStorageService,
   ) {}
 
   async run(options: WorkerOptions = {}): Promise<HighlightWorkerSummary> {
@@ -300,14 +302,7 @@ export class HighlightWorkerService {
     vodId: string,
     analyzerOutputDir = this.resolvePaths().analyzerOutputDir,
   ): Promise<boolean> {
-    const finalPath = join(analyzerOutputDir, `${vodId}.json`);
-    const parsed = await this.readJsonIfValid(finalPath);
-
-    if (!parsed) {
-      return false;
-    }
-
-    return parsed.vodId === vodId && Array.isArray(parsed.momentCandidates);
+    return this.storageService.hasAnalysis(vodId, analyzerOutputDir);
   }
 
   async finalizeAnalysisResult(
@@ -318,7 +313,9 @@ export class HighlightWorkerService {
     const parsed = await this.readJsonIfValid(highlightsPath);
 
     if (!parsed) {
-      throw new Error('[finalize] highlights.jsonが生成されていないか、JSONとして不正です。');
+      throw new Error(
+        '[finalize] highlights.jsonが生成されていないか、JSONとして不正です。',
+      );
     }
 
     if (parsed.vodId !== vodId) {
@@ -328,7 +325,9 @@ export class HighlightWorkerService {
     }
 
     if (!Array.isArray(parsed.momentCandidates)) {
-      throw new Error('[finalize] highlights.jsonにmomentCandidates配列がありません。');
+      throw new Error(
+        '[finalize] highlights.jsonにmomentCandidates配列がありません。',
+      );
     }
 
     const finalPath = join(analyzerOutputDir, `${vodId}.json`);
@@ -336,6 +335,11 @@ export class HighlightWorkerService {
 
     await copyFile(highlightsPath, tempFinalPath);
     await rename(tempFinalPath, finalPath);
+
+    if (this.storageService.isR2Enabled()) {
+      const raw = await readFile(highlightsPath, 'utf8');
+      return this.storageService.putAnalysisJson(vodId, raw, analyzerOutputDir);
+    }
 
     return finalPath;
   }
@@ -350,12 +354,11 @@ export class HighlightWorkerService {
     deleted: string[];
     warnings: { filePath: string; reason: string }[];
   }> {
-    const localFiles = await this.listVodAnalysisJsonFiles(analyzerOutputDir);
-    const obsolete = localFiles.filter((filePath) => {
-      const vodId = this.getVodIdFromFinalJsonPath(filePath);
-
-      return vodId ? !archiveIds.has(vodId) : false;
-    });
+    const analysisRefs =
+      await this.storageService.listAnalysisRefs(analyzerOutputDir);
+    const obsolete = analysisRefs.filter(
+      (analysis) => !archiveIds.has(analysis.vodId),
+    );
     const deleted: string[] = [];
     const warnings: { filePath: string; reason: string }[] = [];
 
@@ -363,47 +366,72 @@ export class HighlightWorkerService {
     console.log('[Highlight Worker]');
     console.log('Archive sync:');
     console.log(`Current Twitch archives: ${archiveIds.size}`);
-    console.log(`Local analysis JSON: ${localFiles.length}`);
+    console.log(`Local analysis JSON: ${analysisRefs.length}`);
     console.log(`Obsolete analysis JSON: ${obsolete.length}`);
 
-    if (archiveIds.size === 0 && localFiles.length > 0) {
+    if (archiveIds.size === 0 && analysisRefs.length > 0) {
       const reason =
         'Twitch archive=0かつlocal VOD JSONが存在するため、安全のため自動全削除を行いません。';
       console.warn(`[Highlight Worker] ${reason}`);
       warnings.push({ filePath: analyzerOutputDir, reason });
-      return { local: localFiles, obsolete, deleted, warnings };
+      return {
+        local: analysisRefs.map((analysis) => analysis.ref),
+        obsolete: obsolete.map((analysis) => analysis.ref),
+        deleted,
+        warnings,
+      };
     }
 
     if (dryRun) {
       if (obsolete.length > 0) {
         console.log('削除予定:');
-        for (const filePath of obsolete) {
-          console.log(`- ${filePath}`);
+        for (const analysis of obsolete) {
+          console.log(`- ${analysis.ref}`);
         }
         console.log('Dry runのため削除しません。');
       }
 
-      return { local: localFiles, obsolete, deleted, warnings };
+      return {
+        local: analysisRefs.map((analysis) => analysis.ref),
+        obsolete: obsolete.map((analysis) => analysis.ref),
+        deleted,
+        warnings,
+      };
     }
 
     if (obsolete.length === 0) {
-      return { local: localFiles, obsolete, deleted, warnings };
+      return {
+        local: analysisRefs.map((analysis) => analysis.ref),
+        obsolete: [],
+        deleted,
+        warnings,
+      };
     }
 
     console.log('Deleted:');
-    for (const filePath of obsolete) {
+    for (const analysis of obsolete) {
       try {
-        await unlink(filePath);
-        deleted.push(filePath);
-        console.log(`- ${filePath}`);
+        const deletedRefs = await this.storageService.deleteAnalysis(
+          analysis.vodId,
+          analyzerOutputDir,
+        );
+        deleted.push(...deletedRefs);
+        for (const deletedRef of deletedRefs) {
+          console.log(`- ${deletedRef}`);
+        }
       } catch (error) {
-        const reason = `Failed to delete ${filePath}: ${formatErrorReason(error)}`;
-        warnings.push({ filePath, reason });
+        const reason = `Failed to delete ${analysis.ref}: ${formatErrorReason(error)}`;
+        warnings.push({ filePath: analysis.ref, reason });
         console.warn(`[Highlight Worker] ${reason}`);
       }
     }
 
-    return { local: localFiles, obsolete, deleted, warnings };
+    return {
+      local: analysisRefs.map((analysis) => analysis.ref),
+      obsolete: obsolete.map((analysis) => analysis.ref),
+      deleted,
+      warnings,
+    };
   }
 
   async acquireLock(lockPath: string): Promise<boolean> {
@@ -439,7 +467,9 @@ export class HighlightWorkerService {
   }
 
   isCurrentLiveVod(video: AppTwitchVideo, liveStreamId?: string): boolean {
-    return Boolean(liveStreamId && video.streamId && video.streamId === liveStreamId);
+    return Boolean(
+      liveStreamId && video.streamId && video.streamId === liveStreamId,
+    );
   }
 
   resolvePaths(): WorkerPaths {
@@ -459,7 +489,10 @@ export class HighlightWorkerService {
     };
   }
 
-  private async downloadVideo(vodId: string, outputPath: string): Promise<void> {
+  private async downloadVideo(
+    vodId: string,
+    outputPath: string,
+  ): Promise<void> {
     const args = ['videodownload', '--id', vodId, '-o', outputPath];
     const quality = this.configService.get<string>('HIGHLIGHT_VOD_QUALITY');
 
@@ -528,7 +561,10 @@ export class HighlightWorkerService {
     ];
 
     try {
-      await this.runCommand(python, args, { cwd: analyzerDir, env: process.env });
+      await this.runCommand(python, args, {
+        cwd: analyzerDir,
+        env: process.env,
+      });
     } catch (error) {
       if (isNodeError(error) && error.code === 'ENOENT') {
         throw new Error(
@@ -580,7 +616,9 @@ export class HighlightWorkerService {
   }
 
   private async resolvePythonExecutable(analyzerDir: string): Promise<string> {
-    const configured = this.configService.get<string>('HIGHLIGHT_ANALYZER_PYTHON');
+    const configured = this.configService.get<string>(
+      'HIGHLIGHT_ANALYZER_PYTHON',
+    );
 
     if (configured) {
       return configured;
@@ -648,7 +686,9 @@ export class HighlightWorkerService {
     return Boolean(await this.readJsonIfValid(filePath));
   }
 
-  private async readJsonIfValid(filePath: string): Promise<AnalysisJson | null> {
+  private async readJsonIfValid(
+    filePath: string,
+  ): Promise<AnalysisJson | null> {
     try {
       const raw = await readFile(filePath, 'utf8');
 
@@ -661,7 +701,7 @@ export class HighlightWorkerService {
   private async listVodAnalysisJsonFiles(
     analyzerOutputDir: string,
   ): Promise<string[]> {
-    let entries;
+    let entries: Dirent[];
     try {
       entries = await readdir(analyzerOutputDir, { withFileTypes: true });
     } catch {
@@ -737,7 +777,9 @@ export class HighlightWorkerService {
     console.log(targets.length === 1 ? 'Next target:' : '処理予定:');
 
     for (const [index, video] of targets.entries()) {
-      console.log(targets.length === 1 ? video.id : `${index + 1}. ${video.id}`);
+      console.log(
+        targets.length === 1 ? video.id : `${index + 1}. ${video.id}`,
+      );
       console.log(`   ${video.createdAt}`);
       console.log(`   ${video.title}`);
     }

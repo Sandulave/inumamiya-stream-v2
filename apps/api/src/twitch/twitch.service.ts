@@ -164,7 +164,8 @@ export class TwitchService {
   private readonly maxLatestClipWindows = 24;
   private readonly maxClipPages = 10;
   private readonly clipsCacheTtlMs = 10 * 60 * 1000;
-  private appAccessTokenCache: { token: string; expiresAtMs: number } | null = null;
+  private appAccessTokenCache: { token: string; expiresAtMs: number } | null =
+    null;
   private readonly allClipsByLoginCache = new Map<
     string,
     { expiresAtMs: number; clips: AppTwitchClip[] }
@@ -422,7 +423,8 @@ export class TwitchService {
     after?: string,
   ): Promise<TwitchPaginatedResult<TwitchClip>> {
     const cursor = after ? this.decodeClipCursor(after, 'latest') : null;
-    let before = cursor?.sort === 'latest' ? new Date(cursor.before) : new Date();
+    let before =
+      cursor?.sort === 'latest' ? new Date(cursor.before) : new Date();
 
     if (Number.isNaN(before.getTime())) {
       throw new BadRequestException('Invalid clip cursor');
@@ -431,7 +433,10 @@ export class TwitchService {
     const collected: TwitchClip[] = [];
     let exploredWindows = 0;
 
-    while (collected.length < limit && exploredWindows < this.maxLatestClipWindows) {
+    while (
+      collected.length < limit &&
+      exploredWindows < this.maxLatestClipWindows
+    ) {
       const endedAt = before;
       const startedAt = new Date(endedAt.getTime() - this.latestClipWindowMs);
       const windowClips = await this.getAllClipsInWindow(
@@ -458,7 +463,8 @@ export class TwitchService {
     const page = sorted.slice(0, limit);
     const oldestReturned = page.at(-1);
     const nextCursor =
-      oldestReturned && (sorted.length > limit || exploredWindows < this.maxLatestClipWindows)
+      oldestReturned &&
+      (sorted.length > limit || exploredWindows < this.maxLatestClipWindows)
         ? this.encodeClipCursor({
             version: 1,
             sort: 'latest',
@@ -571,7 +577,10 @@ export class TwitchService {
         throw new Error('Invalid views cursor');
       }
 
-      if (decoded.sort === 'latest' && Number.isNaN(Date.parse(decoded.before))) {
+      if (
+        decoded.sort === 'latest' &&
+        Number.isNaN(Date.parse(decoded.before))
+      ) {
         throw new Error('Invalid latest cursor');
       }
 
@@ -645,7 +654,12 @@ export class TwitchService {
     login: string,
     limit = 1,
   ): Promise<AppTwitchVideo[]> {
-    const result = await this.getVideosByLogin(login, limit, undefined, 'latest');
+    const result = await this.getVideosByLogin(
+      login,
+      limit,
+      undefined,
+      'latest',
+    );
 
     return result.data.map((video) => this.mapTwitchVideo(video));
   }

@@ -27,7 +27,9 @@ function createClip(overrides: Partial<AppTwitchClip> = {}): AppTwitchClip {
   };
 }
 
-function createMoment(overrides: Partial<MomentCandidate> = {}): MomentCandidate {
+function createMoment(
+  overrides: Partial<MomentCandidate> = {},
+): MomentCandidate {
   return {
     timestampSeconds: 120,
     timestamp: '00:02:00',
@@ -40,23 +42,27 @@ function createMoment(overrides: Partial<MomentCandidate> = {}): MomentCandidate
 describe('highlight clip helpers', () => {
   it('filters clips for the target VOD and matchable vod_offset', () => {
     expect(isClipForVod(createClip(), '2845096588')).toBe(true);
-    expect(isClipForVod(createClip({ videoId: '999' }), '2845096588')).toBe(false);
+    expect(isClipForVod(createClip({ videoId: '999' }), '2845096588')).toBe(
+      false,
+    );
     expect(isClipForVod(createClip({ videoId: '' }), '2845096588')).toBe(false);
-    expect(isClipForVod(createClip({ vodOffset: null }), '2845096588')).toBe(false);
+    expect(isClipForVod(createClip({ vodOffset: null }), '2845096588')).toBe(
+      false,
+    );
   });
 
   it('matches a moment signal inside clip interval with tolerance', () => {
     const clip = createClip({ vodOffset: 100, duration: 30 });
 
-    expect(clipMatchesMoment(clip, createMoment({ timestampSeconds: 120 }))).toBe(
-      true,
-    );
-    expect(clipMatchesMoment(clip, createMoment({ timestampSeconds: 90 }))).toBe(
-      true,
-    );
-    expect(clipMatchesMoment(clip, createMoment({ timestampSeconds: 84 }))).toBe(
-      false,
-    );
+    expect(
+      clipMatchesMoment(clip, createMoment({ timestampSeconds: 120 })),
+    ).toBe(true);
+    expect(
+      clipMatchesMoment(clip, createMoment({ timestampSeconds: 90 })),
+    ).toBe(true);
+    expect(
+      clipMatchesMoment(clip, createMoment({ timestampSeconds: 84 })),
+    ).toBe(false);
   });
 
   it('matches when either audio peak or chat peak falls inside the clip range', () => {

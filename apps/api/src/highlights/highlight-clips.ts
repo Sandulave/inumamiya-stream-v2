@@ -17,7 +17,9 @@ export type MomentClip = {
 };
 
 export function isClipForVod(clip: AppTwitchClip, vodId: string): boolean {
-  return clip.videoId === vodId && clip.videoId !== '' && clip.vodOffset !== null;
+  return (
+    clip.videoId === vodId && clip.videoId !== '' && clip.vodOffset !== null
+  );
 }
 
 export function clipMatchesMoment(
@@ -35,7 +37,10 @@ export function clipMatchesMoment(
     moment.timestampSeconds,
     moment.audioPeakTimestampSeconds,
     moment.chatPeakTimestampSeconds,
-  ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  ].filter(
+    (value): value is number =>
+      typeof value === 'number' && Number.isFinite(value),
+  );
 
   return signals.some(
     (signal) =>

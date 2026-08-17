@@ -349,7 +349,11 @@ describe('TwitchService', () => {
       }),
     });
 
-    const result = await service.getVideosByLogin('inumamiya', 6, 'after-videos');
+    const result = await service.getVideosByLogin(
+      'inumamiya',
+      6,
+      'after-videos',
+    );
     const requestedUrl = new URL(fetchMock.mock.calls[0][0] as string);
 
     expect(requestedUrl.searchParams.get('first')).toBe('6');
@@ -468,8 +472,8 @@ describe('TwitchService', () => {
       }),
     });
 
-    await expect(service.getAllArchiveVideosByLogin('inumamiya')).rejects.toThrow(
-      'Twitch archive pagination cursor repeated',
-    );
+    await expect(
+      service.getAllArchiveVideosByLogin('inumamiya'),
+    ).rejects.toThrow('Twitch archive pagination cursor repeated');
   });
 });

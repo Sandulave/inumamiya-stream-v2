@@ -1,16 +1,14 @@
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  stat,
-  utimes,
-  writeFile,
-} from 'fs/promises';
+import { mkdir, mkdtemp, readFile, stat, utimes, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { ConfigService } from '@nestjs/config';
 import { HighlightWorkerService } from './highlight-worker.service';
+import { HighlightStorageService } from './highlight-storage.service';
 import { AppTwitchVideo, TwitchService } from '../twitch/twitch.service';
+
+type MockS3Command = {
+  input: Record<string, unknown>;
+};
 
 function createVideo(overrides: Partial<AppTwitchVideo> = {}): AppTwitchVideo {
   return {
@@ -42,9 +40,28 @@ function createService(env: Record<string, string | undefined> = {}) {
     getAllArchiveVideosByLogin: jest.fn(),
     getStreamByLogin: jest.fn(),
   } as unknown as jest.Mocked<TwitchService>;
-  const service = new HighlightWorkerService(configService, twitchService);
+  const storageService = new HighlightStorageService(configService);
+  const service = new HighlightWorkerService(
+    configService,
+    twitchService,
+    storageService,
+  );
 
-  return { service, twitchService };
+  return { service, storageService, twitchService };
+}
+
+function getCommandInput(
+  send: jest.Mock,
+  index: number,
+): Record<string, unknown> {
+  const calls = send.mock.calls as unknown as Array<[MockS3Command]>;
+  const command = calls[index]?.[0];
+
+  if (!command) {
+    throw new Error(`S3 command was not called at index ${index}`);
+  }
+
+  return command.input;
 }
 
 describe('HighlightWorkerService', () => {
@@ -62,7 +79,10 @@ describe('HighlightWorkerService', () => {
     };
   }
 
-  function useTempPaths(service: HighlightWorkerService, paths: Awaited<ReturnType<typeof createTempPaths>>) {
+  function useTempPaths(
+    service: HighlightWorkerService,
+    paths: Awaited<ReturnType<typeof createTempPaths>>,
+  ) {
     jest.spyOn(service, 'resolvePaths').mockReturnValue(paths);
   }
 
@@ -93,7 +113,10 @@ describe('HighlightWorkerService', () => {
       service.isAnalysisComplete('2845096588', paths.analyzerOutputDir),
     ).resolves.toBe(false);
 
-    await writeFile(join(paths.analyzerOutputDir, '2845096588.json'), '{broken');
+    await writeFile(
+      join(paths.analyzerOutputDir, '2845096588.json'),
+      '{broken',
+    );
 
     await expect(
       service.isAnalysisComplete('2845096588', paths.analyzerOutputDir),
@@ -105,18 +128,21 @@ describe('HighlightWorkerService', () => {
     const { service } = createService();
     const calls: string[] = [];
 
-    jest.spyOn(service as any, 'downloadVideo').mockImplementation(async () => {
+    jest.spyOn(service as any, 'downloadVideo').mockImplementation(() => {
       calls.push('video');
+      return Promise.resolve();
     });
-    jest.spyOn(service as any, 'downloadChat').mockImplementation(async () => {
+    jest.spyOn(service as any, 'downloadChat').mockImplementation(() => {
       calls.push('chat');
+      return Promise.resolve();
     });
-    jest.spyOn(service as any, 'runAnalyzer').mockImplementation(async () => {
+    jest.spyOn(service as any, 'runAnalyzer').mockImplementation(() => {
       calls.push('analyzer');
+      return Promise.resolve();
     });
-    jest.spyOn(service, 'finalizeAnalysisResult').mockImplementation(async () => {
+    jest.spyOn(service, 'finalizeAnalysisResult').mockImplementation(() => {
       calls.push('finalize');
-      return join(paths.analyzerOutputDir, '2845096588.json');
+      return Promise.resolve(join(paths.analyzerOutputDir, '2845096588.json'));
     });
 
     await service.processVod(createVideo(), paths);
@@ -131,7 +157,10 @@ describe('HighlightWorkerService', () => {
 
     await mkdir(vodTempDir, { recursive: true });
     await writeFile(join(vodTempDir, 'video.mp4'), 'video');
-    await writeFile(join(vodTempDir, 'chat.json'), JSON.stringify({ comments: [] }));
+    await writeFile(
+      join(vodTempDir, 'chat.json'),
+      JSON.stringify({ comments: [] }),
+    );
 
     const videoDownload = jest
       .spyOn(service as any, 'downloadVideo')
@@ -140,9 +169,9 @@ describe('HighlightWorkerService', () => {
       .spyOn(service as any, 'downloadChat')
       .mockResolvedValue(undefined);
     jest.spyOn(service as any, 'runAnalyzer').mockResolvedValue(undefined);
-    jest.spyOn(service, 'finalizeAnalysisResult').mockResolvedValue(
-      join(paths.analyzerOutputDir, '2845096588.json'),
-    );
+    jest
+      .spyOn(service, 'finalizeAnalysisResult')
+      .mockResolvedValue(join(paths.analyzerOutputDir, '2845096588.json'));
 
     await service.processVod(createVideo(), paths);
 
@@ -188,9 +217,9 @@ describe('HighlightWorkerService', () => {
       await writeFile(videoPath, 'video');
     });
     jest.spyOn(service as any, 'downloadChat').mockResolvedValue(undefined);
-    jest.spyOn(service as any, 'runAnalyzer').mockRejectedValueOnce(
-      new Error('analysis failed'),
-    );
+    jest
+      .spyOn(service as any, 'runAnalyzer')
+      .mockRejectedValueOnce(new Error('analysis failed'));
 
     await expect(service.processVod(createVideo(), paths)).rejects.toThrow(
       'analysis failed',
@@ -198,9 +227,9 @@ describe('HighlightWorkerService', () => {
     await expect(stat(videoPath)).resolves.toBeDefined();
 
     jest.spyOn(service as any, 'runAnalyzer').mockResolvedValue(undefined);
-    jest.spyOn(service, 'finalizeAnalysisResult').mockResolvedValue(
-      join(paths.analyzerOutputDir, '2845096588.json'),
-    );
+    jest
+      .spyOn(service, 'finalizeAnalysisResult')
+      .mockResolvedValue(join(paths.analyzerOutputDir, '2845096588.json'));
 
     await service.processVod(createVideo(), paths);
     await expect(stat(vodTempDir)).rejects.toThrow();
@@ -219,7 +248,7 @@ describe('HighlightWorkerService', () => {
 
     await service.run();
 
-    expect(twitchService.getAllArchiveVideosByLogin).not.toHaveBeenCalled();
+    expect(twitchService.getAllArchiveVideosByLogin.mock.calls).toHaveLength(0);
   });
 
   it('recovers a stale worker lock', async () => {
@@ -275,9 +304,9 @@ describe('HighlightWorkerService', () => {
     ]);
     twitchService.getStreamByLogin.mockResolvedValue(null);
     const processed: string[] = [];
-    jest.spyOn(service, 'processVod').mockImplementation(async (video) => {
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
       processed.push(video.id);
-      return {};
+      return Promise.resolve({});
     });
 
     const summary = await service.run();
@@ -339,9 +368,9 @@ describe('HighlightWorkerService', () => {
     ]);
     twitchService.getStreamByLogin.mockResolvedValue(null);
     const processed: string[] = [];
-    jest.spyOn(service, 'processVod').mockImplementation(async (video) => {
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
       processed.push(video.id);
-      return {};
+      return Promise.resolve({});
     });
 
     await service.run();
@@ -362,9 +391,9 @@ describe('HighlightWorkerService', () => {
     ]);
     twitchService.getStreamByLogin.mockResolvedValue(null);
     const processed: string[] = [];
-    jest.spyOn(service, 'processVod').mockImplementation(async (video) => {
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
       processed.push(video.id);
-      throw new Error('analyze.py failed');
+      return Promise.reject(new Error('analyze.py failed'));
     });
 
     const summary = await service.run();
@@ -423,9 +452,9 @@ describe('HighlightWorkerService', () => {
     twitchService.getAllArchiveVideosByLogin.mockResolvedValue(videos);
     twitchService.getStreamByLogin.mockResolvedValue(null);
     const processed: string[] = [];
-    jest.spyOn(service, 'processVod').mockImplementation(async (video) => {
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
       processed.push(video.id);
-      return {};
+      return Promise.resolve({});
     });
 
     const summary = await service.run({ mode: 'local-reanalyze-all' });
@@ -477,9 +506,9 @@ describe('HighlightWorkerService', () => {
     ]);
     twitchService.getStreamByLogin.mockResolvedValue(null);
     const processed: string[] = [];
-    jest.spyOn(service, 'processVod').mockImplementation(async (video) => {
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
       processed.push(video.id);
-      return {};
+      return Promise.resolve({});
     });
 
     const summary = await service.run({ mode: 'local-reanalyze-all' });
@@ -506,9 +535,9 @@ describe('HighlightWorkerService', () => {
     ]);
     twitchService.getStreamByLogin.mockResolvedValue(null);
     const processed: string[] = [];
-    jest.spyOn(service, 'processVod').mockImplementation(async (video) => {
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
       processed.push(video.id);
-      return {};
+      return Promise.resolve({});
     });
 
     const summary = await service.run({
@@ -565,6 +594,35 @@ describe('HighlightWorkerService', () => {
     await expect(readFile(finalPath, 'utf8')).resolves.toContain('new');
   });
 
+  it('uploads finalized analysis to R2 when R2 is configured', async () => {
+    const paths = await createTempPaths();
+    const { service, storageService } = createService({
+      R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+      R2_ACCESS_KEY_ID: 'test-access-key',
+      R2_SECRET_ACCESS_KEY: 'test-secret-key',
+      R2_BUCKET: 'test-bucket',
+    });
+    const send = jest.fn().mockResolvedValue({});
+    (storageService as unknown as { s3Client: { send: jest.Mock } }).s3Client =
+      {
+        send,
+      };
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'highlights.json'),
+      JSON.stringify({ vodId: '2845096588', momentCandidates: [] }),
+    );
+
+    await expect(
+      service.finalizeAnalysisResult('2845096588', paths.analyzerOutputDir),
+    ).resolves.toBe('highlights/2845096588/result.json');
+    expect(getCommandInput(send, 0)).toMatchObject({
+      Bucket: 'test-bucket',
+      Key: 'highlights/2845096588/result.json',
+    });
+  });
+
   it('reanalysis failure keeps the existing final JSON', async () => {
     const paths = await createTempPaths();
     const { service } = createService();
@@ -600,12 +658,12 @@ describe('HighlightWorkerService', () => {
     ]);
     twitchService.getStreamByLogin.mockResolvedValue(null);
     const processed: string[] = [];
-    jest.spyOn(service, 'processVod').mockImplementation(async (video) => {
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
       processed.push(video.id);
       if (video.id === 'vod-2') {
-        throw new Error('failed');
+        return Promise.reject(new Error('failed'));
       }
-      return {};
+      return Promise.resolve({});
     });
 
     const summary = await service.run({ reanalyzeAll: true });
@@ -624,11 +682,23 @@ describe('HighlightWorkerService', () => {
     const other = join(paths.analyzerOutputDir, 'notes.json');
 
     await mkdir(paths.analyzerOutputDir, { recursive: true });
-    await writeFile(fileA, JSON.stringify({ vodId: '111', momentCandidates: [] }));
-    await writeFile(fileB, JSON.stringify({ vodId: '222', momentCandidates: [] }));
-    await writeFile(fileC, JSON.stringify({ vodId: '333', momentCandidates: [] }));
+    await writeFile(
+      fileA,
+      JSON.stringify({ vodId: '111', momentCandidates: [] }),
+    );
+    await writeFile(
+      fileB,
+      JSON.stringify({ vodId: '222', momentCandidates: [] }),
+    );
+    await writeFile(
+      fileC,
+      JSON.stringify({ vodId: '333', momentCandidates: [] }),
+    );
     await writeFile(highlights, JSON.stringify({ vodId: '999' }));
-    await writeFile(other, JSON.stringify({ vodId: '222', momentCandidates: [] }));
+    await writeFile(
+      other,
+      JSON.stringify({ vodId: '222', momentCandidates: [] }),
+    );
 
     const result = await service.syncObsoleteAnalysisJson(
       new Set(['111', '222']),
@@ -650,7 +720,10 @@ describe('HighlightWorkerService', () => {
     const filePath = join(paths.analyzerOutputDir, '333.json');
 
     await mkdir(paths.analyzerOutputDir, { recursive: true });
-    await writeFile(filePath, JSON.stringify({ vodId: '333', momentCandidates: [] }));
+    await writeFile(
+      filePath,
+      JSON.stringify({ vodId: '333', momentCandidates: [] }),
+    );
 
     const result = await service.syncObsoleteAnalysisJson(
       new Set(['111']),
@@ -695,9 +768,7 @@ describe('HighlightWorkerService', () => {
       deleted: [],
       warnings: [{ filePath: 'old.json', reason: 'delete failed' }],
     });
-    const processVod = jest
-      .spyOn(service, 'processVod')
-      .mockResolvedValue({});
+    const processVod = jest.spyOn(service, 'processVod').mockResolvedValue({});
 
     const summary = await service.run();
 
@@ -713,7 +784,10 @@ describe('HighlightWorkerService', () => {
     const filePath = join(paths.analyzerOutputDir, '333.json');
 
     await mkdir(paths.analyzerOutputDir, { recursive: true });
-    await writeFile(filePath, JSON.stringify({ vodId: '333', momentCandidates: [] }));
+    await writeFile(
+      filePath,
+      JSON.stringify({ vodId: '333', momentCandidates: [] }),
+    );
 
     const result = await service.syncObsoleteAnalysisJson(
       new Set(),
@@ -733,7 +807,10 @@ describe('HighlightWorkerService', () => {
     const filePath = join(paths.analyzerOutputDir, '333.json');
 
     await mkdir(paths.analyzerOutputDir, { recursive: true });
-    await writeFile(filePath, JSON.stringify({ vodId: '333', momentCandidates: [] }));
+    await writeFile(
+      filePath,
+      JSON.stringify({ vodId: '333', momentCandidates: [] }),
+    );
 
     const result = await service.syncObsoleteAnalysisJson(
       new Set(['333']),

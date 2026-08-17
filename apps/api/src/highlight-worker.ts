@@ -23,7 +23,9 @@ function parseDryRun(argv: string[]): boolean {
   return argv.includes('--dry-run');
 }
 
-function parseMode(argv: string[]): 'server-incremental' | 'local-reanalyze-all' {
+function parseMode(
+  argv: string[],
+): 'server-incremental' | 'local-reanalyze-all' {
   const equalsArg = argv.find((arg) => arg.startsWith('--mode='));
   const modeIndex = argv.indexOf('--mode');
   const rawMode =

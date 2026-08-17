@@ -94,7 +94,9 @@ describe('TwitchController', () => {
   });
 
   it('should return videos from the Twitch service', async () => {
-    const videos = [{ id: 'video1', url: 'https://www.twitch.tv/videos/video1' }];
+    const videos = [
+      { id: 'video1', url: 'https://www.twitch.tv/videos/video1' },
+    ];
     twitchServiceMock.getVideosByLogin.mockResolvedValue({
       data: videos,
       pagination: { cursor: 'next-videos' },

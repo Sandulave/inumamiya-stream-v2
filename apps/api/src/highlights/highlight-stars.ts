@@ -21,6 +21,8 @@ export function scoreToStars(score: number): number {
     return 0;
   }
 
-  return STAR_SCORE_THRESHOLDS.find((threshold) => clamped >= threshold.min)
-    ?.stars ?? 0;
+  return (
+    STAR_SCORE_THRESHOLDS.find((threshold) => clamped >= threshold.min)
+      ?.stars ?? 0
+  );
 }

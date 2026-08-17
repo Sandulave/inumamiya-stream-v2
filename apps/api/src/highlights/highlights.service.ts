@@ -60,7 +60,9 @@ export class HighlightsService {
   ): Promise<HighlightMomentsResponse> {
     const analysis = await this.analysisLoader.findByVodId(vodId);
     const clips = (
-      await this.twitchService.getAllClipsByLogin(DEFAULT_HIGHLIGHT_BROADCASTER_LOGIN)
+      await this.twitchService.getAllClipsByLogin(
+        DEFAULT_HIGHLIGHT_BROADCASTER_LOGIN,
+      )
     ).filter((clip) => isClipForVod(clip, analysis.vodId));
 
     const moments = analysis.momentCandidates
@@ -85,7 +87,9 @@ export class HighlightsService {
       return sort;
     }
 
-    throw new BadRequestException('sort must be timestamp, audio, chat, or clips');
+    throw new BadRequestException(
+      'sort must be timestamp, audio, chat, or clips',
+    );
   }
 
   parseStars(value: string | undefined, fieldName: string): number | undefined {
@@ -96,7 +100,9 @@ export class HighlightsService {
     const parsed = Number(value);
 
     if (!Number.isInteger(parsed) || parsed < 0 || parsed > 5) {
-      throw new BadRequestException(`${fieldName} must be an integer from 0 to 5`);
+      throw new BadRequestException(
+        `${fieldName} must be an integer from 0 to 5`,
+      );
     }
 
     return parsed;
@@ -157,7 +163,10 @@ export class HighlightsService {
       return false;
     }
 
-    if (query.minChatStars !== undefined && moment.chatStars < query.minChatStars) {
+    if (
+      query.minChatStars !== undefined &&
+      moment.chatStars < query.minChatStars
+    ) {
       return false;
     }
 
@@ -178,15 +187,21 @@ export class HighlightsService {
   ) {
     moments.sort((a, b) => {
       if (sort === 'audio') {
-        return b.audioScore - a.audioScore || a.timestampSeconds - b.timestampSeconds;
+        return (
+          b.audioScore - a.audioScore || a.timestampSeconds - b.timestampSeconds
+        );
       }
 
       if (sort === 'chat') {
-        return b.chatScore - a.chatScore || a.timestampSeconds - b.timestampSeconds;
+        return (
+          b.chatScore - a.chatScore || a.timestampSeconds - b.timestampSeconds
+        );
       }
 
       if (sort === 'clips') {
-        return b.clipCount - a.clipCount || a.timestampSeconds - b.timestampSeconds;
+        return (
+          b.clipCount - a.clipCount || a.timestampSeconds - b.timestampSeconds
+        );
       }
 
       return a.timestampSeconds - b.timestampSeconds;
