@@ -81,6 +81,7 @@ export default function HighlightsExplorer({
   const [selectedMomentSeconds, setSelectedMomentSeconds] = useState(
     moments[0]?.timestampSeconds,
   );
+  const [playbackRequestId, setPlaybackRequestId] = useState(0);
 
   const selectedMoment = useMemo(() => {
     return (
@@ -151,6 +152,7 @@ export default function HighlightsExplorer({
 
   function selectMoment(moment: HighlightMoment) {
     setSelectedMomentSeconds(moment.timestampSeconds);
+    setPlaybackRequestId((current) => current + 1);
   }
 
   if (resultStatus === 'not-found') {
@@ -176,7 +178,7 @@ export default function HighlightsExplorer({
       <div className="highlightPlayerColumn">
         <div className="highlightPlayerShell">
           <TwitchPlayerFrame
-            key={`${vodId}-${playerStartSeconds}`}
+            key={`${vodId}-${playerStartSeconds}-${playbackRequestId}`}
             type="vod"
             id={vodId}
             parentHost={parentHost}
