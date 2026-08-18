@@ -329,8 +329,10 @@ def write_timeline_csv(path: Path, samples: list[SampleMetrics]) -> None:
                 "chat_activity_percentile_score",
                 "chat_local_burst_score",
                 "chat_json_score",
+                "audio_loudness_dbfs",
                 "audio_db",
                 "audio_delta",
+                "audio_eligible",
                 "audio_level_score",
                 "audio_spike_score",
                 "highlight_score",
@@ -349,6 +351,7 @@ def write_timeline_csv(path: Path, samples: list[SampleMetrics]) -> None:
                 **data,
                 "chat_score": sample.observation_chat_score,
                 "audio_score": sample.audio_score,
+                "audio_loudness_dbfs": sample.audio_db,
             }
             writer.writerow({key: round(row[key], 3) if isinstance(row[key], float) else row[key] for key in writer.fieldnames})
 

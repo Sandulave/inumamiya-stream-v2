@@ -36,6 +36,45 @@ export type HighlightMomentsResponse = {
   moments: HighlightMoment[];
 };
 
+export type HighlightTimelinePoint = {
+  timestampSeconds: number;
+  audio: {
+    level: number;
+    rawDelta: number;
+    peakTimestampSeconds: number;
+  };
+  chat: {
+    level: number;
+    messageCount10s: number;
+    rawScore: number;
+    peakTimestampSeconds: number;
+  };
+};
+
+export type HighlightTimelineResponse = {
+  vodId: string;
+  durationSeconds: number;
+  points: HighlightTimelinePoint[];
+};
+
+export type HighlightChapter = {
+  startSeconds: number;
+  endSeconds: number;
+  durationSeconds: number;
+  categoryName: string;
+  gameName?: string;
+  gameId?: string;
+  type?: string;
+  title?: string;
+  thumbnailUrl?: string;
+};
+
+export type HighlightChaptersResponse = {
+  vodId: string;
+  durationSeconds: number;
+  chapters: HighlightChapter[];
+};
+
 export type HighlightSort = 'timestamp' | 'audio' | 'chat' | 'clips';
 
 export type HighlightFilters = {

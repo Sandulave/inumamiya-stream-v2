@@ -232,4 +232,89 @@ describe('HighlightStorageService', () => {
     );
     await expect(stat(join(root, '123.json.tmp'))).rejects.toThrow();
   });
+
+  it('puts and gets local thumbnails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'highlight-storage-'));
+    const service = new HighlightStorageService(
+      createConfig({ HIGHLIGHT_ANALYSIS_DIR: root }),
+    );
+    const data = Buffer.from('webp');
+
+    await expect(service.putThumbnail('123', 45.9, data)).resolves.toBe(
+      join(root, '123', 'thumbnails', '45.webp'),
+    );
+    await expect(service.getThumbnail('123', 45)).resolves.toEqual(data);
+    await expect(service.getThumbnail('123', 46)).resolves.toBeNull();
+    await expect(service.listThumbnailTimestamps('123')).resolves.toEqual(
+      new Set([45]),
+    );
+  });
+
+  it('puts and gets R2 thumbnails', async () => {
+    const service = new HighlightStorageService(createConfig(createR2Env()));
+    const data = Buffer.from('webp');
+    const send = jest
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        Body: { transformToByteArray: () => Promise.resolve(Uint8Array.from(data)) },
+      });
+    attachMockS3(service, send);
+
+    await expect(service.putThumbnail('123', 45.9, data)).resolves.toBe(
+      'highlights/123/thumbnails/45.webp',
+    );
+    expect(getCommandInput(send, 0)).toMatchObject({
+      Bucket: 'test-bucket',
+      Key: 'highlights/123/thumbnails/45.webp',
+      ContentType: 'image/webp',
+    });
+    await expect(service.getThumbnail('123', 45)).resolves.toEqual(data);
+  });
+
+  it('separates missing R2 thumbnails from R2 service errors', async () => {
+    const missing = new HighlightStorageService(createConfig(createR2Env()));
+    const missingSend = jest.fn().mockRejectedValue({
+      name: 'NoSuchKey',
+      $metadata: { httpStatusCode: 404 },
+    });
+    attachMockS3(missing, missingSend);
+
+    await expect(missing.getThumbnail('123', 45)).resolves.toBeNull();
+
+    const failed = new HighlightStorageService(createConfig(createR2Env()));
+    const failedSend = jest.fn().mockRejectedValue(new Error('R2 unavailable'));
+    attachMockS3(failed, failedSend);
+
+    await expect(failed.getThumbnail('123', 45)).rejects.toThrow(
+      InternalServerErrorException,
+    );
+  });
+
+  it('lists paginated R2 thumbnail timestamps', async () => {
+    const service = new HighlightStorageService(createConfig(createR2Env()));
+    const send = jest
+      .fn()
+      .mockResolvedValueOnce({
+        IsTruncated: true,
+        NextContinuationToken: 'next',
+        Contents: [
+          { Key: 'highlights/123/thumbnails/45.webp' },
+          { Key: 'highlights/123/thumbnails/not-a-number.webp' },
+          { Key: 'highlights/123/result.json' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        IsTruncated: false,
+        Contents: [{ Key: 'highlights/123/thumbnails/90.webp' }],
+      });
+    attachMockS3(service, send);
+
+    await expect(service.listThumbnailTimestamps('123')).resolves.toEqual(
+      new Set([45, 90]),
+    );
+    expect(getCommandInput(send, 1)).toMatchObject({
+      ContinuationToken: 'next',
+    });
+  });
 });

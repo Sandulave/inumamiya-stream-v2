@@ -4,6 +4,7 @@ import { HighlightsService } from './highlights.service';
 import { TwitchService } from '../twitch/twitch.service';
 import { HighlightAnalysis } from './highlight-analysis.types';
 import { AppTwitchClip } from '../twitch/twitch.service';
+import { HighlightStorageService } from './highlight-storage.service';
 
 function createAnalysis(): HighlightAnalysis {
   return {
@@ -64,10 +65,16 @@ describe('HighlightsService', () => {
   const twitchServiceMock = {
     getAllClipsByLogin: jest.fn(),
   };
+  const storageServiceMock = {
+    listThumbnailTimestamps: jest.fn(),
+    getThumbnail: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     analysisLoaderMock.findByVodId.mockResolvedValue(createAnalysis());
+    storageServiceMock.listThumbnailTimestamps.mockResolvedValue(new Set());
+    storageServiceMock.getThumbnail.mockResolvedValue(null);
     twitchServiceMock.getAllClipsByLogin.mockResolvedValue([
       createClip({ id: 'clip-a', vodOffset: 100 }),
       createClip({ id: 'clip-b', videoId: '999', vodOffset: 230 }),
@@ -86,6 +93,10 @@ describe('HighlightsService', () => {
         {
           provide: TwitchService,
           useValue: twitchServiceMock,
+        },
+        {
+          provide: HighlightStorageService,
+          useValue: storageServiceMock,
         },
       ],
     }).compile();
@@ -203,6 +214,157 @@ describe('HighlightsService', () => {
     );
     expect(() => service.parseHasClips('yes')).toThrow(
       'hasClips must be true or false',
+    );
+  });
+
+  it('adds thumbnailUrl only for existing moment thumbnails', async () => {
+    storageServiceMock.listThumbnailTimestamps.mockResolvedValue(new Set([120]));
+
+    const result = await service.getVodMoments('2845096588', {
+      sort: 'timestamp',
+    });
+
+    expect(storageServiceMock.listThumbnailTimestamps).toHaveBeenCalledWith(
+      '2845096588',
+    );
+    expect(result.moments[0]).toMatchObject({
+      timestampSeconds: 120,
+      thumbnailUrl: '/highlights/vods/2845096588/thumbnails/120',
+    });
+    expect(result.moments[1].thumbnailUrl).toBeNull();
+  });
+
+  it('returns thumbnail bytes for the thumbnail endpoint', async () => {
+    const data = Buffer.from('webp');
+    storageServiceMock.getThumbnail.mockResolvedValue(data);
+
+    await expect(
+      service.getVodThumbnail('2845096588', '120'),
+    ).resolves.toBe(data);
+    expect(storageServiceMock.getThumbnail).toHaveBeenCalledWith(
+      '2845096588',
+      120,
+    );
+  });
+
+  it('returns visualization timeline when present', async () => {
+    analysisLoaderMock.findByVodId.mockResolvedValue({
+      ...createAnalysis(),
+      visualizationTimeline: {
+        durationSeconds: 360,
+        maxPoints: 1800,
+        source: 'timeline.csv',
+        points: [
+          {
+            timestampSeconds: 120,
+            audio: {
+              level: 80,
+              rawDelta: 12,
+              peakTimestampSeconds: 120,
+            },
+            chat: {
+              level: 40,
+              messageCount10s: 2,
+              rawScore: 5,
+              peakTimestampSeconds: 121,
+            },
+          },
+        ],
+      },
+    });
+
+    await expect(service.getVodTimeline('2845096588')).resolves.toEqual({
+      vodId: '2845096588',
+      durationSeconds: 360,
+      points: [
+        {
+          timestampSeconds: 120,
+          audio: {
+            level: 80,
+            rawDelta: 12,
+            peakTimestampSeconds: 120,
+          },
+          chat: {
+            level: 40,
+            messageCount10s: 2,
+            rawScore: 5,
+            peakTimestampSeconds: 121,
+          },
+        },
+      ],
+    });
+  });
+
+  it('returns chapters when present', async () => {
+    analysisLoaderMock.findByVodId.mockResolvedValue({
+      ...createAnalysis(),
+      durationSeconds: 24874,
+      chapters: [
+        {
+          startSeconds: 0,
+          endSeconds: 10740,
+          durationSeconds: 10740,
+          categoryName: 'Star Fox',
+          gameName: 'Star Fox',
+          gameId: '123',
+        },
+        {
+          startSeconds: 10740,
+          endSeconds: 24874,
+          durationSeconds: 14134,
+          categoryName: 'Splatoon 3',
+          gameName: 'Splatoon 3',
+          gameId: '456',
+        },
+      ],
+    });
+
+    await expect(service.getVodChapters('2845096588')).resolves.toEqual({
+      vodId: '2845096588',
+      durationSeconds: 24874,
+      chapters: [
+        {
+          startSeconds: 0,
+          endSeconds: 10740,
+          durationSeconds: 10740,
+          categoryName: 'Star Fox',
+          gameName: 'Star Fox',
+          gameId: '123',
+        },
+        {
+          startSeconds: 10740,
+          endSeconds: 24874,
+          durationSeconds: 14134,
+          categoryName: 'Splatoon 3',
+          gameName: 'Splatoon 3',
+          gameId: '456',
+        },
+      ],
+    });
+  });
+
+  it('returns empty chapters for older results without chapter metadata', async () => {
+    await expect(service.getVodChapters('2845096588')).resolves.toEqual({
+      vodId: '2845096588',
+      durationSeconds: 0,
+      chapters: [],
+    });
+  });
+
+  it('returns not found when visualization timeline is absent', async () => {
+    await expect(service.getVodTimeline('2845096588')).rejects.toThrow(
+      'Timeline for vodId 2845096588 was not found',
+    );
+  });
+
+  it('rejects missing and invalid thumbnail endpoint requests', async () => {
+    storageServiceMock.getThumbnail.mockResolvedValue(null);
+
+    await expect(service.getVodThumbnail('2845096588', '120')).rejects.toThrow(
+      'was not found',
+    );
+    await expect(service.getVodThumbnail('2845096588', '12.5')).rejects.toThrow(
+      'timestampSeconds must be a non-negative integer',
     );
   });
 });

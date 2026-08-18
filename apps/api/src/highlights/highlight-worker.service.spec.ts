@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { ConfigService } from '@nestjs/config';
 import { HighlightWorkerService } from './highlight-worker.service';
 import { HighlightStorageService } from './highlight-storage.service';
+import { HighlightChaptersService } from './highlight-chapters.service';
 import { AppTwitchVideo, TwitchService } from '../twitch/twitch.service';
 
 type MockS3Command = {
@@ -41,13 +42,17 @@ function createService(env: Record<string, string | undefined> = {}) {
     getStreamByLogin: jest.fn(),
   } as unknown as jest.Mocked<TwitchService>;
   const storageService = new HighlightStorageService(configService);
+  const chaptersService = {
+    getChapters: jest.fn().mockResolvedValue([]),
+  } as unknown as jest.Mocked<HighlightChaptersService>;
   const service = new HighlightWorkerService(
     configService,
     twitchService,
     storageService,
+    chaptersService,
   );
 
-  return { service, storageService, twitchService };
+  return { service, storageService, twitchService, chaptersService };
 }
 
 function getCommandInput(
@@ -594,6 +599,197 @@ describe('HighlightWorkerService', () => {
     await expect(readFile(finalPath, 'utf8')).resolves.toContain('new');
   });
 
+  it('adds visualizationTimeline from timeline.csv when finalizing', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const finalPath = join(paths.analyzerOutputDir, '2845096588.json');
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'highlights.json'),
+      JSON.stringify({
+        vodId: '2845096588',
+        durationSeconds: 2,
+        momentCandidates: [],
+      }),
+    );
+    await writeFile(
+      join(paths.analyzerOutputDir, 'timeline.csv'),
+      [
+        'timestamp_seconds,audio_delta,event_chat_score,chat_message_count_10s',
+        '0,0,0,0',
+        '1,10,3,2',
+        '2,5,9,4',
+      ].join('\n'),
+    );
+
+    await service.finalizeAnalysisResult('2845096588', paths.analyzerOutputDir);
+
+    const result = JSON.parse(await readFile(finalPath, 'utf8')) as {
+      visualizationTimeline?: { points: unknown[] };
+    };
+    expect(result.visualizationTimeline).toMatchObject({
+      durationSeconds: 2,
+      maxPoints: 1800,
+      source: 'timeline.csv',
+    });
+    expect(result.visualizationTimeline?.points).toHaveLength(3);
+    expect(result.visualizationTimeline?.points[1]).toMatchObject({
+      timestampSeconds: 1,
+      audio: { level: 100, rawDelta: 10, peakTimestampSeconds: 1 },
+      chat: { level: 50, messageCount10s: 2, peakTimestampSeconds: 1 },
+    });
+  });
+
+  it('adds visualizationTimeline from UTF-8 BOM timeline.csv when finalizing', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const finalPath = join(paths.analyzerOutputDir, '2845096588.json');
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'highlights.json'),
+      JSON.stringify({
+        vodId: '2845096588',
+        durationSeconds: 2,
+        momentCandidates: [],
+      }),
+    );
+    await writeFile(
+      join(paths.analyzerOutputDir, 'timeline.csv'),
+      [
+        '\uFEFFtimestamp_seconds,audio_delta,event_chat_score,chat_message_count_10s',
+        '0,0,0,0',
+        '1,10,3,2',
+        '2,5,9,4',
+      ].join('\n'),
+    );
+
+    await service.finalizeAnalysisResult('2845096588', paths.analyzerOutputDir);
+
+    const result = JSON.parse(await readFile(finalPath, 'utf8')) as {
+      visualizationTimeline?: { points: unknown[] };
+    };
+    expect(result.visualizationTimeline).toMatchObject({
+      durationSeconds: 2,
+      maxPoints: 1800,
+      source: 'timeline.csv',
+    });
+    expect(result.visualizationTimeline?.points).toHaveLength(3);
+    expect(result.visualizationTimeline?.points[1]).toMatchObject({
+      timestampSeconds: 1,
+      audio: { level: 100, rawDelta: 10, peakTimestampSeconds: 1 },
+      chat: { level: 50, messageCount10s: 2, peakTimestampSeconds: 1 },
+    });
+  });
+
+  it('adds chapters before saving finalized analysis', async () => {
+    const paths = await createTempPaths();
+    const { service, chaptersService } = createService();
+    const finalPath = join(paths.analyzerOutputDir, '2845096588.json');
+    chaptersService.getChapters.mockResolvedValue([
+      {
+        startSeconds: 0,
+        endSeconds: 120,
+        durationSeconds: 120,
+        categoryName: 'Star Fox',
+        gameName: 'Star Fox',
+      },
+    ]);
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'highlights.json'),
+      JSON.stringify({
+        vodId: '2845096588',
+        durationSeconds: 120,
+        momentCandidates: [],
+      }),
+    );
+
+    await service.finalizeAnalysisResult('2845096588', paths.analyzerOutputDir);
+
+    await expect(readFile(finalPath, 'utf8')).resolves.toContain('Star Fox');
+    expect(chaptersService.getChapters).toHaveBeenCalledWith('2845096588', 120);
+  });
+
+  it('keeps finalized analysis when chapter fetch fails', async () => {
+    const paths = await createTempPaths();
+    const { service, chaptersService } = createService();
+    const finalPath = join(paths.analyzerOutputDir, '2845096588.json');
+    chaptersService.getChapters.mockRejectedValue(new Error('unavailable'));
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'highlights.json'),
+      JSON.stringify({
+        vodId: '2845096588',
+        durationSeconds: 120,
+        momentCandidates: [],
+      }),
+    );
+
+    await service.finalizeAnalysisResult('2845096588', paths.analyzerOutputDir);
+
+    const result = JSON.parse(await readFile(finalPath, 'utf8')) as {
+      chapters?: unknown[];
+    };
+    expect(result.chapters).toEqual([]);
+  });
+
+  it('downsamples visualizationTimeline and keeps bucket peaks', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const lines = ['timestamp_seconds,audio_delta,event_chat_score,chat_message_count_10s'];
+
+    for (let second = 0; second < 2000; second += 1) {
+      const audioDelta = second === 1999 ? 100 : second % 7;
+      const chatCount = second === 1000 ? 50 : second % 5;
+      lines.push(`${second},${audioDelta},${chatCount},${chatCount}`);
+    }
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(join(paths.analyzerOutputDir, 'timeline.csv'), lines.join('\n'));
+
+    const timeline = await (service as any).buildVisualizationTimeline(
+      paths.analyzerOutputDir,
+      { durationSeconds: 2000, momentCandidates: [] },
+    );
+
+    expect(timeline.points.length).toBeLessThanOrEqual(1800);
+    expect(
+      timeline.points.some(
+        (point: { audio: { rawDelta: number; peakTimestampSeconds: number } }) =>
+          point.audio.rawDelta === 100 && point.audio.peakTimestampSeconds === 1999,
+      ),
+    ).toBe(true);
+    expect(
+      timeline.points.some(
+        (point: { chat: { messageCount10s: number; peakTimestampSeconds: number } }) =>
+          point.chat.messageCount10s === 50 &&
+          point.chat.peakTimestampSeconds === 1000,
+      ),
+    ).toBe(true);
+  });
+
+  it('returns an empty visualizationTimeline for an empty timeline csv', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(join(paths.analyzerOutputDir, 'timeline.csv'), 'timestamp_seconds\n');
+
+    const timeline = await (service as any).buildVisualizationTimeline(
+      paths.analyzerOutputDir,
+      { durationSeconds: 0, momentCandidates: [] },
+    );
+
+    expect(timeline).toMatchObject({
+      durationSeconds: 0,
+      points: [],
+    });
+  });
+
   it('uploads finalized analysis to R2 when R2 is configured', async () => {
     const paths = await createTempPaths();
     const { service, storageService } = createService({
@@ -620,6 +816,118 @@ describe('HighlightWorkerService', () => {
     expect(getCommandInput(send, 0)).toMatchObject({
       Bucket: 'test-bucket',
       Key: 'highlights/2845096588/result.json',
+    });
+  });
+
+  it('generates distinct moment thumbnails before saving the result', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const vodTempDir = join(paths.tempRoot, '2845096588');
+    const videoPath = join(vodTempDir, 'video.mp4');
+    const calls: string[] = [];
+
+    await mkdir(vodTempDir, { recursive: true });
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(videoPath, 'video');
+    jest
+      .spyOn(service as any, 'runCommand')
+      .mockImplementation((_command, args: string[]) => {
+        calls.push(args.join(' '));
+        return writeFile(args.at(-1) as string, 'webp');
+      });
+
+    await (service as any).generateAndStoreThumbnails(
+      '2845096588',
+      videoPath,
+      {
+        vodId: '2845096588',
+        momentCandidates: [
+          { timestampSeconds: 120.9 },
+          { timestampSeconds: 120.1 },
+          { timestampSeconds: 0.5 },
+        ],
+      },
+      paths.analyzerOutputDir,
+    );
+
+    expect(calls).toHaveLength(2);
+    await expect(
+      readFile(
+        join(paths.analyzerOutputDir, '2845096588', 'thumbnails', '0.webp'),
+        'utf8',
+      ),
+    ).resolves.toBe('webp');
+    await expect(
+      readFile(
+        join(paths.analyzerOutputDir, '2845096588', 'thumbnails', '120.webp'),
+        'utf8',
+      ),
+    ).resolves.toBe('webp');
+  });
+
+  it('does not save result JSON when thumbnail generation fails', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const finalPath = join(paths.analyzerOutputDir, '2845096588.json');
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'highlights.json'),
+      JSON.stringify({
+        vodId: '2845096588',
+        momentCandidates: [{ timestampSeconds: 120 }],
+      }),
+    );
+
+    await expect(
+      service.finalizeAnalysisResult(
+        '2845096588',
+        paths.analyzerOutputDir,
+        () => Promise.reject(new Error('thumbnail failed')),
+      ),
+    ).rejects.toThrow('thumbnail failed');
+    await expect(stat(finalPath)).rejects.toThrow();
+  });
+
+  it('does not upload result JSON when thumbnail upload fails', async () => {
+    const paths = await createTempPaths();
+    const { service, storageService } = createService({
+      R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+      R2_ACCESS_KEY_ID: 'test-access-key',
+      R2_SECRET_ACCESS_KEY: 'test-secret-key',
+      R2_BUCKET: 'test-bucket',
+    });
+    const send = jest.fn().mockRejectedValue(new Error('thumbnail put failed'));
+    (storageService as unknown as { s3Client: { send: jest.Mock } }).s3Client =
+      {
+        send,
+      };
+
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'highlights.json'),
+      JSON.stringify({
+        vodId: '2845096588',
+        momentCandidates: [{ timestampSeconds: 120 }],
+      }),
+    );
+
+    await expect(
+      service.finalizeAnalysisResult(
+        '2845096588',
+        paths.analyzerOutputDir,
+        () =>
+          storageService.putThumbnail(
+            '2845096588',
+            120,
+            Buffer.from('webp'),
+            paths.analyzerOutputDir,
+          ),
+      ),
+    ).rejects.toThrow('R2 thumbnail upload failed');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(getCommandInput(send, 0)).toMatchObject({
+      Key: 'highlights/2845096588/thumbnails/120.webp',
     });
   });
 

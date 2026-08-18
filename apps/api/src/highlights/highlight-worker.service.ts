@@ -5,7 +5,6 @@ import { constants, Dirent } from 'fs';
 import { accessSync } from 'fs';
 import {
   access,
-  copyFile,
   mkdir,
   readFile,
   readdir,
@@ -18,9 +17,15 @@ import {
 import { dirname, join, resolve } from 'path';
 import { AppTwitchVideo, TwitchService } from '../twitch/twitch.service';
 import { HighlightStorageService } from './highlight-storage.service';
+import {
+  HighlightChapter,
+  VisualizationTimeline,
+} from './highlight-analysis.types';
+import { HighlightChaptersService } from './highlight-chapters.service';
 
 const WORKER_LOGIN = 'inumamiya';
 const DEFAULT_LOCK_MAX_AGE_HOURS = 12;
+const MAX_TIMELINE_POINTS = 1800;
 
 type WorkerOptions = {
   maxVods?: number;
@@ -47,6 +52,18 @@ export type HighlightWorkerSummary = {
 type AnalysisJson = {
   vodId?: unknown;
   momentCandidates?: unknown;
+  durationSeconds?: unknown;
+  visualizationTimeline?: VisualizationTimeline;
+  chapters?: HighlightChapter[];
+};
+
+type BeforeSaveAnalysis = (analysis: AnalysisJson) => Promise<void>;
+
+type TimelineCsvRow = {
+  timestampSeconds: number;
+  audioDelta: number;
+  eventChatScore: number;
+  chatMessageCount10s: number;
 };
 
 type WorkerPaths = {
@@ -62,6 +79,7 @@ export class HighlightWorkerService {
     private readonly configService: ConfigService,
     private readonly twitchService: TwitchService,
     private readonly storageService: HighlightStorageService,
+    private readonly chaptersService: HighlightChaptersService,
   ) {}
 
   async run(options: WorkerOptions = {}): Promise<HighlightWorkerSummary> {
@@ -272,10 +290,19 @@ export class HighlightWorkerService {
       console.log('[Highlight Worker] [3/4] 解析しています...');
       await this.runAnalyzer(video.id, videoPath, chatPath, paths.analyzerDir);
 
-      console.log('[Highlight Worker] [4/4] 解析結果を保存しています...');
+      console.log('[Highlight Worker] [4/6] timelineを生成しています...');
+      console.log('[Highlight Worker] [5/6] サムネイルを生成しています...');
+      console.log('[Highlight Worker] [6/6] 解析結果を保存しています...');
       const finalPath = await this.finalizeAnalysisResult(
         video.id,
         paths.analyzerOutputDir,
+        (analysis) =>
+          this.generateAndStoreThumbnails(
+            video.id,
+            videoPath,
+            analysis,
+            paths.analyzerOutputDir,
+          ),
       );
 
       try {
@@ -308,6 +335,7 @@ export class HighlightWorkerService {
   async finalizeAnalysisResult(
     vodId: string,
     analyzerOutputDir = this.resolvePaths().analyzerOutputDir,
+    beforeSave?: BeforeSaveAnalysis,
   ): Promise<string> {
     const highlightsPath = join(analyzerOutputDir, 'highlights.json');
     const parsed = await this.readJsonIfValid(highlightsPath);
@@ -330,14 +358,24 @@ export class HighlightWorkerService {
       );
     }
 
+      parsed.visualizationTimeline = await this.buildVisualizationTimeline(
+      analyzerOutputDir,
+      parsed,
+    );
+    parsed.chapters = await this.getOptionalChapters(vodId, parsed);
+
+    if (beforeSave) {
+      await beforeSave(parsed);
+    }
+
     const finalPath = join(analyzerOutputDir, `${vodId}.json`);
     const tempFinalPath = join(analyzerOutputDir, `${vodId}.json.tmp`);
+    const raw = JSON.stringify(parsed, null, 2);
 
-    await copyFile(highlightsPath, tempFinalPath);
+    await writeFile(tempFinalPath, raw);
     await rename(tempFinalPath, finalPath);
 
     if (this.storageService.isR2Enabled()) {
-      const raw = await readFile(highlightsPath, 'utf8');
       return this.storageService.putAnalysisJson(vodId, raw, analyzerOutputDir);
     }
 
@@ -578,6 +616,259 @@ export class HighlightWorkerService {
     }
   }
 
+  private async generateAndStoreThumbnails(
+    vodId: string,
+    videoPath: string,
+    analysis: AnalysisJson,
+    analyzerOutputDir: string,
+  ): Promise<void> {
+    const timestamps = this.extractDistinctMomentTimestamps(analysis);
+
+    if (timestamps.length === 0) {
+      return;
+    }
+
+    const thumbnailTempDir = join(dirname(videoPath), 'generated-thumbnails');
+    await mkdir(thumbnailTempDir, { recursive: true });
+
+    for (const timestamp of timestamps) {
+      const outputPath = join(thumbnailTempDir, `${timestamp}.webp`);
+      await this.generateThumbnail(videoPath, timestamp, outputPath);
+      const data = await readFile(outputPath);
+      await this.storageService.putThumbnail(
+        vodId,
+        timestamp,
+        data,
+        analyzerOutputDir,
+      );
+    }
+  }
+
+  private async buildVisualizationTimeline(
+    analyzerOutputDir: string,
+    analysis: AnalysisJson,
+  ): Promise<VisualizationTimeline | undefined> {
+    const csvPath = join(analyzerOutputDir, 'timeline.csv');
+    let raw: string;
+
+    try {
+      raw = await readFile(csvPath, 'utf8');
+    } catch {
+      return undefined;
+    }
+
+    const rows = this.parseTimelineCsv(raw);
+
+    if (rows.length === 0) {
+      return {
+        durationSeconds: this.getTimelineDuration(analysis, rows),
+        maxPoints: MAX_TIMELINE_POINTS,
+        source: 'timeline.csv',
+        points: [],
+      };
+    }
+
+    const maxAudioDelta = Math.max(
+      0,
+      ...rows.map((row) => Math.max(0, row.audioDelta)),
+    );
+    const maxChatCount = Math.max(
+      0,
+      ...rows.map((row) => Math.max(0, row.chatMessageCount10s)),
+    );
+    const bucketCount = Math.min(MAX_TIMELINE_POINTS, rows.length);
+    const bucketSize = Math.ceil(rows.length / bucketCount);
+    const points: VisualizationTimeline['points'] = [];
+
+    for (let start = 0; start < rows.length; start += bucketSize) {
+      const bucket = rows.slice(start, start + bucketSize);
+      const audioPeak = bucket.reduce((best, row) =>
+        row.audioDelta > best.audioDelta ? row : best,
+      );
+      const chatPeak = bucket.reduce((best, row) =>
+        row.chatMessageCount10s > best.chatMessageCount10s ||
+        (row.chatMessageCount10s === best.chatMessageCount10s &&
+          row.eventChatScore > best.eventChatScore)
+          ? row
+          : best,
+      );
+      const first = bucket[0];
+      const last = bucket[bucket.length - 1];
+
+      points.push({
+        timestampSeconds: roundNumber(
+          (first.timestampSeconds + last.timestampSeconds) / 2,
+        ),
+        audio: {
+          level:
+            maxAudioDelta > 0
+              ? roundNumber((Math.max(0, audioPeak.audioDelta) / maxAudioDelta) * 100)
+              : 0,
+          rawDelta: roundNumber(audioPeak.audioDelta),
+          peakTimestampSeconds: roundNumber(audioPeak.timestampSeconds),
+        },
+        chat: {
+          level:
+            maxChatCount > 0
+              ? roundNumber((Math.max(0, chatPeak.chatMessageCount10s) / maxChatCount) * 100)
+              : 0,
+          messageCount10s: chatPeak.chatMessageCount10s,
+          rawScore: roundNumber(chatPeak.eventChatScore),
+          peakTimestampSeconds: roundNumber(chatPeak.timestampSeconds),
+        },
+      });
+    }
+
+    return {
+      durationSeconds: this.getTimelineDuration(analysis, rows),
+      maxPoints: MAX_TIMELINE_POINTS,
+      source: 'timeline.csv',
+      points,
+    };
+  }
+
+  private parseTimelineCsv(raw: string): TimelineCsvRow[] {
+    const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+
+    if (lines.length < 2) {
+      return [];
+    }
+
+    const headers = parseCsvLine(lines[0]).map((header, index) =>
+      index === 0 ? header.replace(/^\uFEFF/, '') : header,
+    );
+    const rows: TimelineCsvRow[] = [];
+
+    for (const line of lines.slice(1)) {
+      const values = parseCsvLine(line);
+      const row = new Map<string, string>();
+
+      for (const [index, header] of headers.entries()) {
+        row.set(header, values[index] ?? '');
+      }
+
+      const timestampSeconds = parseFiniteNumber(row.get('timestamp_seconds'));
+
+      if (timestampSeconds === null) {
+        continue;
+      }
+
+      rows.push({
+        timestampSeconds,
+        audioDelta: parseFiniteNumber(row.get('audio_delta')) ?? 0,
+        eventChatScore: parseFiniteNumber(row.get('event_chat_score')) ?? 0,
+        chatMessageCount10s:
+          Math.max(
+            0,
+            Math.floor(parseFiniteNumber(row.get('chat_message_count_10s')) ?? 0),
+          ),
+      });
+    }
+
+    return rows;
+  }
+
+  private getTimelineDuration(
+    analysis: AnalysisJson,
+    rows: TimelineCsvRow[],
+  ): number {
+    if (
+      typeof analysis.durationSeconds === 'number' &&
+      Number.isFinite(analysis.durationSeconds)
+    ) {
+      return roundNumber(Math.max(0, analysis.durationSeconds));
+    }
+
+    return roundNumber(rows.at(-1)?.timestampSeconds ?? 0);
+  }
+
+  private async getOptionalChapters(
+    vodId: string,
+    analysis: AnalysisJson,
+  ): Promise<AnalysisJson['chapters']> {
+    try {
+      return await this.chaptersService.getChapters(
+        vodId,
+        typeof analysis.durationSeconds === 'number'
+          ? analysis.durationSeconds
+          : undefined,
+      );
+    } catch (error) {
+      console.warn(
+        `[Highlight Worker] Chapter metadata fetch failed for ${vodId}: ${formatErrorReason(error)}`,
+      );
+
+      return [];
+    }
+  }
+
+  private async generateThumbnail(
+    videoPath: string,
+    timestampSeconds: number,
+    outputPath: string,
+  ): Promise<void> {
+    const ffmpeg = this.resolveFfmpegExecutable();
+    const args = [
+      '-y',
+      '-ss',
+      String(timestampSeconds),
+      '-i',
+      videoPath,
+      '-frames:v',
+      '1',
+      '-vf',
+      'scale=480:270:force_original_aspect_ratio=increase,crop=480:270',
+      '-c:v',
+      'libwebp',
+      '-quality',
+      '78',
+      outputPath,
+    ];
+
+    try {
+      await this.runCommand(ffmpeg, args, {
+        cwd: dirname(videoPath),
+        env: process.env,
+      });
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        throw new Error(
+          '[thumbnail] ffmpeg was not found. Set FFMPEG_PATH or add ffmpeg to PATH.',
+        );
+      }
+
+      throw new Error(
+        `[thumbnail] ffmpeg thumbnail generation failed at ${timestampSeconds}s`,
+        { cause: error },
+      );
+    }
+  }
+
+  private extractDistinctMomentTimestamps(analysis: AnalysisJson): number[] {
+    if (!Array.isArray(analysis.momentCandidates)) {
+      return [];
+    }
+
+    const timestamps = new Set<number>();
+
+    for (const candidate of analysis.momentCandidates) {
+      if (!isRecord(candidate)) {
+        continue;
+      }
+
+      const timestampSeconds = candidate.timestampSeconds;
+
+      if (
+        typeof timestampSeconds === 'number' &&
+        Number.isFinite(timestampSeconds)
+      ) {
+        timestamps.add(Math.max(0, Math.floor(timestampSeconds)));
+      }
+    }
+
+    return [...timestamps].sort((a, b) => a - b);
+  }
+
   private runCommand(
     command: string,
     args: string[],
@@ -613,6 +904,10 @@ export class HighlightWorkerService {
     return process.platform === 'win32'
       ? 'TwitchDownloaderCLI.exe'
       : 'TwitchDownloaderCLI';
+  }
+
+  private resolveFfmpegExecutable(): string {
+    return this.configService.get<string>('FFMPEG_PATH') ?? 'ffmpeg';
   }
 
   private async resolvePythonExecutable(analyzerDir: string): Promise<string> {
@@ -893,4 +1188,52 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 function formatErrorReason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseFiniteNumber(value: string | undefined): number | null {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundNumber(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (char === '"' && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+
+  return values;
 }

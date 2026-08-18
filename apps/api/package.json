@@ -15,6 +15,7 @@
     "highlight:worker": "ts-node -r tsconfig-paths/register src/highlight-worker.ts --mode=server",
     "highlight:reanalyze-all": "ts-node -r tsconfig-paths/register src/highlight-worker.ts --mode=reanalyze-all",
     "highlight:r2-upload": "ts-node -r tsconfig-paths/register src/highlight-r2-upload.ts",
+    "highlight:enrich": "ts-node -r tsconfig-paths/register src/highlight-enrich.ts",
     "highlight:worker:prod": "node dist/highlight-worker.js --mode=server",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",

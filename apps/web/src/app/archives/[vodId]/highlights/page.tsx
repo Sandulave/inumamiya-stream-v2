@@ -3,8 +3,10 @@ import { headers } from 'next/headers';
 import HighlightsExplorer from './HighlightsExplorer';
 import {
   HighlightFilters,
+  HighlightChaptersResponse,
   HighlightMomentsResponse,
   HighlightSort,
+  HighlightTimelineResponse,
 } from '../../../highlights/types';
 
 type Props = {
@@ -118,6 +120,48 @@ async function fetchMoments(vodId: string, filters: HighlightFilters) {
   }
 }
 
+async function fetchTimeline(
+  vodId: string,
+): Promise<HighlightTimelineResponse | null> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/highlights/vods/${encodeURIComponent(vodId)}/timeline`,
+      {
+        cache: 'no-store',
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as HighlightTimelineResponse;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchChapters(
+  vodId: string,
+): Promise<HighlightChaptersResponse | null> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/highlights/vods/${encodeURIComponent(vodId)}/chapters`,
+      {
+        cache: 'no-store',
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as HighlightChaptersResponse;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchVodMetadata(vodId: string): Promise<TwitchVideo | null> {
   try {
     const response = await fetch(
@@ -154,8 +198,10 @@ export default async function HighlightMomentsPage({
     minChatStars: parseStars(query.minChatStars),
     hasClips: parseHasClips(query.hasClips),
   };
-  const [momentsResult, vodMetadata] = await Promise.all([
+  const [momentsResult, timeline, chapters, vodMetadata] = await Promise.all([
     fetchMoments(vodId, filters),
+    fetchTimeline(vodId),
+    fetchChapters(vodId),
     fetchVodMetadata(vodId),
   ]);
 
@@ -191,6 +237,8 @@ export default async function HighlightMomentsPage({
         filters={filters}
         resultStatus={momentsResult.status}
         momentsResponse={momentsResult.data}
+        timelineResponse={timeline}
+        chaptersResponse={chapters}
       />
     </main>
   );

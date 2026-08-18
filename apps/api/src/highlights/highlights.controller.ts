@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import { HighlightsService } from './highlights.service';
 
 @Controller('highlights')
@@ -25,5 +26,32 @@ export class HighlightsController {
       ),
       hasClips: this.highlightsService.parseHasClips(hasClips),
     });
+  }
+
+  @Get('vods/:vodId/timeline')
+  async getVodTimeline(@Param('vodId') vodId: string) {
+    return this.highlightsService.getVodTimeline(vodId);
+  }
+
+  @Get('vods/:vodId/chapters')
+  async getVodChapters(@Param('vodId') vodId: string) {
+    return this.highlightsService.getVodChapters(vodId);
+  }
+
+  @Get('vods/:vodId/thumbnails/:timestampSeconds')
+  async getVodThumbnail(
+    @Param('vodId') vodId: string,
+    @Param('timestampSeconds') timestampSeconds: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const thumbnail = await this.highlightsService.getVodThumbnail(
+      vodId,
+      timestampSeconds,
+    );
+
+    response.setHeader('Content-Type', 'image/webp');
+    response.setHeader('Cache-Control', 'public, max-age=86400');
+
+    return new StreamableFile(thumbnail);
   }
 }

@@ -254,9 +254,10 @@ R2 object key:
 
 ```text
 highlights/<vodId>/result.json
+highlights/<vodId>/thumbnails/<timestampSeconds>.webp
 ```
 
-将来thumbnailを追加する場合は、同じprefix配下の `highlights/<vodId>/thumbnails/<timestamp>.webp` を使う想定です。
+thumbnailは見どころの `timestampSeconds` 付近のフレームをWebPで保存します。Webの再生開始位置は従来どおり見どころ時刻の約5秒前ですが、thumbnailは `playbackStartSeconds` ではなく実際の見どころ時刻を使います。
 
 R2を有効にするenv:
 
@@ -277,6 +278,26 @@ pnpm --filter api highlight:r2-upload
 ```
 
 `--dry-run` はローカルJSONの検証とupload対象表示だけを行い、R2へは書き込みません。通常実行では `tools/highlight-analyzer/output/<numericVodId>.json` のうち、JSON parse、`vodId`一致、`momentCandidates` validationに成功したものを `highlights/<vodId>/result.json` へ上書きuploadします。
+
+thumbnail配信:
+
+```text
+GET /highlights/vods/:vodId/thumbnails/:timestampSeconds
+```
+
+R2 bucketはprivateのままにし、ブラウザへR2 URLを直接返しません。`/moments` はthumbnailが存在するmomentだけ `thumbnailUrl` としてAPIのrelative pathを返します。APIは1つのVODにつき `highlights/<vodId>/thumbnails/` をlistして存在確認するため、momentごとのHeadObjectは行いません。
+
+WorkerはVOD解析後、`tools/highlight-worker-temp/<vodId>/video.mp4` から `ffmpeg` で480x270程度のWebP thumbnailを生成し、thumbnail保存が完了してからresult JSONを保存します。`FFMPEG_PATH` を設定するとその実行ファイルを使い、未設定時はPATH上の `ffmpeg` を使います。
+
+将来の既存アーカイブ補完用dry-run:
+
+```powershell
+pnpm --filter api highlight:enrich -- --dry-run
+pnpm --filter api highlight:enrich -- --dry-run --vod-id 2845984263
+pnpm --filter api highlight:enrich -- --dry-run --max-vods 1
+```
+
+現段階の `highlight:enrich` は対象確認用の土台だけで、VOD download、thumbnail生成、R2 uploadは行いません。
 
 一時ファイル:
 

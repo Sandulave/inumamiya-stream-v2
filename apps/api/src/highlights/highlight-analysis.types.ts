@@ -30,6 +30,40 @@ export type MomentCandidate = {
   [key: string]: unknown;
 };
 
+export type VisualizationTimelinePoint = {
+  timestampSeconds: number;
+  audio: {
+    level: number;
+    rawDelta: number;
+    peakTimestampSeconds: number;
+  };
+  chat: {
+    level: number;
+    messageCount10s: number;
+    rawScore: number;
+    peakTimestampSeconds: number;
+  };
+};
+
+export type VisualizationTimeline = {
+  durationSeconds: number;
+  maxPoints: number;
+  source: 'timeline.csv';
+  points: VisualizationTimelinePoint[];
+};
+
+export type HighlightChapter = {
+  startSeconds: number;
+  endSeconds: number;
+  durationSeconds: number;
+  categoryName: string;
+  gameName?: string;
+  gameId?: string;
+  type?: string;
+  title?: string;
+  thumbnailUrl?: string;
+};
+
 export type HighlightAnalysis = {
   source?: string;
   durationSeconds?: number;
@@ -38,6 +72,8 @@ export type HighlightAnalysis = {
   vodOffsetSeconds?: number;
   scoreStatistics?: ScoreStatistics;
   rawScoreStatistics?: RawScoreStatistics;
+  visualizationTimeline?: VisualizationTimeline;
+  chapters?: HighlightChapter[];
   momentCandidates: MomentCandidate[];
   vodId: string;
   [key: string]: unknown;

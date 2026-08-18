@@ -3,6 +3,8 @@ from statistics import median
 
 from models import EnhancedHighlightEvent, EventHighlightEvent, HighlightEvent, MomentCandidate, SampleMetrics
 
+AUDIO_MIN_LOUDNESS_DBFS = -15.0
+
 
 def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
@@ -38,6 +40,14 @@ def normalize_against_max(value: float, max_value: float) -> float:
     return clamp(value / max_value * 100.0)
 
 
+def effective_audio_delta(sample: SampleMetrics) -> float:
+    if not sample.audio_eligible:
+        return 0.0
+    if sample.audio_eligible_delta > 0.0:
+        return sample.audio_eligible_delta
+    return max(0.0, sample.audio_delta)
+
+
 def compute_audio_scores(samples: list[SampleMetrics], baseline_window_seconds: float) -> None:
     audio_values = [sample.audio_db for sample in samples]
     level_scores = normalize_to_100(audio_values)
@@ -53,11 +63,16 @@ def compute_audio_scores(samples: list[SampleMetrics], baseline_window_seconds: 
         ]
         if not baseline_values:
             sample.audio_delta = 0.0
+            sample.audio_eligible = False
+            sample.audio_eligible_delta = 0.0
             sample.audio_spike_score = 0.0
             continue
         baseline = median(baseline_values)
         sample.audio_delta = sample.audio_db - baseline
-        sample.audio_spike_score = clamp(sample.audio_delta / 18.0 * 100.0)
+        positive_delta = max(0.0, sample.audio_delta)
+        sample.audio_eligible = sample.audio_db >= AUDIO_MIN_LOUDNESS_DBFS and positive_delta > 0.0
+        sample.audio_eligible_delta = positive_delta if sample.audio_eligible else 0.0
+        sample.audio_spike_score = clamp(sample.audio_eligible_delta / 18.0 * 100.0)
 
 
 def compute_highlight_scores(samples: list[SampleMetrics], weights: dict[str, float]) -> None:
@@ -281,12 +296,12 @@ def merge_event_peaks(
 
 
 def compute_observation_scores(samples: list[SampleMetrics]) -> None:
-    max_audio_delta = max((sample.audio_delta for sample in samples if sample.audio_delta > 0.0), default=0.0)
+    max_audio_delta = max((effective_audio_delta(sample) for sample in samples), default=0.0)
     max_event_chat_score = max((sample.event_chat_score for sample in samples if sample.event_chat_score > 0.0), default=0.0)
     for sample in samples:
         sample.audio_raw_score = sample.audio_spike_score
         sample.chat_raw_score = sample.event_chat_score
-        sample.audio_score = normalize_against_max(sample.audio_delta, max_audio_delta)
+        sample.audio_score = normalize_against_max(effective_audio_delta(sample), max_audio_delta)
         sample.observation_chat_score = normalize_against_max(sample.event_chat_score, max_event_chat_score)
 
 
@@ -300,6 +315,7 @@ def compute_score_statistics(samples: list[SampleMetrics]) -> dict[str, dict[str
 def compute_raw_score_statistics(samples: list[SampleMetrics]) -> dict[str, dict[str, float]]:
     return {
         "audioDelta": raw_score_statistics([sample.audio_delta for sample in samples if sample.audio_delta > 0.0]),
+        "audioEligibleDelta": raw_score_statistics([effective_audio_delta(sample) for sample in samples if effective_audio_delta(sample) > 0.0]),
         "eventChatScore": raw_score_statistics([sample.event_chat_score for sample in samples if sample.event_chat_score > 0.0]),
     }
 

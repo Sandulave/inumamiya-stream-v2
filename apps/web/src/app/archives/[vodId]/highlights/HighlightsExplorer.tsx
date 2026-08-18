@@ -6,9 +6,13 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import TwitchPlayerFrame from '../../../components/TwitchPlayerFrame';
 import {
   HighlightFilters,
+  HighlightChapter,
+  HighlightChaptersResponse,
   HighlightMoment,
   HighlightMomentsResponse,
   HighlightSort,
+  HighlightTimelinePoint,
+  HighlightTimelineResponse,
 } from '../../../highlights/types';
 
 type Props = {
@@ -17,6 +21,8 @@ type Props = {
   filters: HighlightFilters;
   resultStatus: 'ok' | 'not-found' | 'error';
   momentsResponse: HighlightMomentsResponse | null;
+  timelineResponse: HighlightTimelineResponse | null;
+  chaptersResponse: HighlightChaptersResponse | null;
 };
 
 const sortOptions: { value: HighlightSort; label: string }[] = [
@@ -28,6 +34,7 @@ const sortOptions: { value: HighlightSort; label: string }[] = [
 
 const starFilterOptions = [0, 1, 2, 3, 4, 5];
 const PLAYBACK_LEAD_SECONDS = 5;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 function Stars({ value, label }: { value: number; label: string }) {
   const safeValue = Math.min(Math.max(Math.floor(value), 0), 5);
@@ -62,12 +69,219 @@ function getPlaybackStart(moment: HighlightMoment) {
   return Math.max(0, Math.floor(moment.timestampSeconds - PLAYBACK_LEAD_SECONDS));
 }
 
+function formatTimestamp(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const remainingSeconds = safeSeconds % 60;
+  const paddedMinutes = hours > 0 ? String(minutes).padStart(2, '0') : String(minutes);
+  const paddedSeconds = String(remainingSeconds).padStart(2, '0');
+
+  return hours > 0
+    ? `${hours}:${paddedMinutes}:${paddedSeconds}`
+    : `${minutes}:${paddedSeconds}`;
+}
+
+function formatChapterDuration(seconds: number) {
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}時間${minutes}分`;
+  }
+
+  return `${minutes}分`;
+}
+
+function resolveThumbnailUrl(thumbnailUrl: string) {
+  if (/^https?:\/\//.test(thumbnailUrl)) {
+    return thumbnailUrl;
+  }
+
+  return new URL(thumbnailUrl, API_BASE_URL).toString();
+}
+
+function buildAreaPath(
+  points: HighlightTimelinePoint[],
+  durationSeconds: number,
+  getValue: (point: HighlightTimelinePoint) => number,
+) {
+  if (points.length === 0 || durationSeconds <= 0) {
+    return '';
+  }
+
+  const top = 8;
+  const bottom = 92;
+  const commands = points.map((point, index) => {
+    const x = (point.timestampSeconds / durationSeconds) * 100;
+    const y = bottom - (Math.max(0, Math.min(100, getValue(point))) / 100) * (bottom - top);
+
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(3)} ${y.toFixed(3)}`;
+  });
+
+  const lastX = (points.at(-1)?.timestampSeconds ?? durationSeconds) / durationSeconds * 100;
+  const firstX = (points[0].timestampSeconds / durationSeconds) * 100;
+
+  return `${commands.join(' ')} L ${lastX.toFixed(3)} 96 L ${firstX.toFixed(3)} 96 Z`;
+}
+
+function TimelineGraph({
+  title,
+  tone,
+  points,
+  durationSeconds,
+  selectedMomentSeconds,
+  getValue,
+  getPeakTimestamp,
+  renderTooltip,
+  onSeek,
+}: {
+  title: string;
+  tone: 'audio' | 'chat';
+  points: HighlightTimelinePoint[];
+  durationSeconds: number;
+  selectedMomentSeconds?: number;
+  getValue: (point: HighlightTimelinePoint) => number;
+  getPeakTimestamp: (point: HighlightTimelinePoint) => number;
+  renderTooltip: (point: HighlightTimelinePoint) => string;
+  onSeek: (timestampSeconds: number) => void;
+}) {
+  const [hovered, setHovered] = useState<HighlightTimelinePoint | null>(null);
+  const path = buildAreaPath(points, durationSeconds, getValue);
+  const selectedX =
+    selectedMomentSeconds !== undefined && durationSeconds > 0
+      ? (selectedMomentSeconds / durationSeconds) * 100
+      : null;
+
+  function pickPoint(clientX: number, currentTarget: SVGSVGElement) {
+    const rect = currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const timestamp = ratio * durationSeconds;
+
+    return (
+      points.reduce((closest, point) =>
+        Math.abs(point.timestampSeconds - timestamp) <
+        Math.abs(closest.timestampSeconds - timestamp)
+          ? point
+          : closest,
+      ) ?? null
+    );
+  }
+
+  return (
+    <div className={`timelineGraph timelineGraph-${tone}`}>
+      <div className="timelineGraphTop">
+        <h3>{title}</h3>
+        {hovered ? (
+          <span className="timelineTooltip">{renderTooltip(hovered)}</span>
+        ) : null}
+      </div>
+      <svg
+        viewBox="0 0 100 100"
+        role="img"
+        aria-label={title}
+        preserveAspectRatio="none"
+        onPointerMove={(event) => setHovered(pickPoint(event.clientX, event.currentTarget))}
+        onPointerLeave={() => setHovered(null)}
+        onClick={(event) => {
+          const point = pickPoint(event.clientX, event.currentTarget);
+          onSeek(getPeakTimestamp(point));
+        }}
+      >
+        <path className="timelineGridLine" d="M 0 50 L 100 50" />
+        <path className="timelineArea" d={path} />
+        {selectedX !== null ? (
+          <line
+            className="timelineSelectedMarker"
+            x1={selectedX}
+            x2={selectedX}
+            y1="4"
+            y2="96"
+          />
+        ) : null}
+      </svg>
+      <div className="timelineAxis">
+        <span>0:00</span>
+        <span>{formatTimestamp(durationSeconds)}</span>
+      </div>
+    </div>
+  );
+}
+
+function ChapterStrip({
+  chapters,
+  durationSeconds,
+  onSeek,
+}: {
+  chapters: HighlightChapter[];
+  durationSeconds: number;
+  onSeek: (timestampSeconds: number) => void;
+}) {
+  if (chapters.length === 0 || durationSeconds <= 0) {
+    return null;
+  }
+
+  return (
+    <div className="chapterStrip">
+      <div className="chapterStripTop">
+        <h3>ゲーム / カテゴリ</h3>
+      </div>
+      <div className="chapterTrack" role="list">
+        {chapters.map((chapter) => {
+          const startPercent = Math.max(
+            0,
+            Math.min(100, (chapter.startSeconds / durationSeconds) * 100),
+          );
+          const widthPercent = Math.max(
+            0.2,
+            Math.min(
+              100 - startPercent,
+              (chapter.durationSeconds / durationSeconds) * 100,
+            ),
+          );
+          const label = chapter.categoryName;
+          const title = `${label} ${formatTimestamp(
+            chapter.startSeconds,
+          )} - ${formatTimestamp(chapter.endSeconds)} (${formatChapterDuration(
+            chapter.durationSeconds,
+          )})`;
+
+          return (
+            <button
+              key={`${chapter.startSeconds}-${chapter.endSeconds}-${label}`}
+              type="button"
+              className="chapterSegment"
+              style={{
+                left: `${startPercent}%`,
+                width: `${widthPercent}%`,
+              }}
+              title={title}
+              aria-label={`${label} ${formatTimestamp(chapter.startSeconds)}から再生`}
+              role="listitem"
+              onClick={() => onSeek(chapter.startSeconds)}
+            >
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="timelineAxis">
+        <span>0:00</span>
+        <span>{formatTimestamp(durationSeconds)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function HighlightsExplorer({
   vodId,
   parentHost,
   filters,
   resultStatus,
   momentsResponse,
+  timelineResponse,
+  chaptersResponse,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -81,6 +295,9 @@ export default function HighlightsExplorer({
   const [selectedMomentSeconds, setSelectedMomentSeconds] = useState(
     moments[0]?.timestampSeconds,
   );
+  const [requestedStartSeconds, setRequestedStartSeconds] = useState(
+    moments[0] ? getPlaybackStart(moments[0]) : 0,
+  );
   const [playbackRequestId, setPlaybackRequestId] = useState(0);
 
   const selectedMoment = useMemo(() => {
@@ -91,7 +308,7 @@ export default function HighlightsExplorer({
     );
   }, [moments, selectedMomentSeconds]);
 
-  const playerStartSeconds = selectedMoment ? getPlaybackStart(selectedMoment) : 0;
+  const playerStartSeconds = requestedStartSeconds;
 
   useEffect(() => {
     if (!isInfoOpen) {
@@ -152,6 +369,12 @@ export default function HighlightsExplorer({
 
   function selectMoment(moment: HighlightMoment) {
     setSelectedMomentSeconds(moment.timestampSeconds);
+    setRequestedStartSeconds(getPlaybackStart(moment));
+    setPlaybackRequestId((current) => current + 1);
+  }
+
+  function seekTimeline(timestampSeconds: number) {
+    setRequestedStartSeconds(Math.max(0, Math.floor(timestampSeconds)));
     setPlaybackRequestId((current) => current + 1);
   }
 
@@ -193,6 +416,43 @@ export default function HighlightsExplorer({
               <p>{selectedMoment.timestamp}</p>
               <span>見どころの少し前から再生します</span>
             </div>
+          </div>
+        ) : null}
+        {timelineResponse && timelineResponse.points.length > 0 ? (
+          <div className="timelinePanel">
+            {chaptersResponse && chaptersResponse.chapters.length > 0 ? (
+              <ChapterStrip
+                chapters={chaptersResponse.chapters}
+                durationSeconds={chaptersResponse.durationSeconds}
+                onSeek={seekTimeline}
+              />
+            ) : null}
+            <TimelineGraph
+              title="音の変化"
+              tone="audio"
+              points={timelineResponse.points}
+              durationSeconds={timelineResponse.durationSeconds}
+              selectedMomentSeconds={selectedMoment?.timestampSeconds}
+              getValue={(point) => point.audio.level}
+              getPeakTimestamp={(point) => point.audio.peakTimestampSeconds}
+              renderTooltip={(point) =>
+                `${formatTimestamp(point.audio.peakTimestampSeconds)} 音の変化: ${Math.round(point.audio.level)} / 100`
+              }
+              onSeek={seekTimeline}
+            />
+            <TimelineGraph
+              title="チャット速度"
+              tone="chat"
+              points={timelineResponse.points}
+              durationSeconds={timelineResponse.durationSeconds}
+              selectedMomentSeconds={selectedMoment?.timestampSeconds}
+              getValue={(point) => point.chat.level}
+              getPeakTimestamp={(point) => point.chat.peakTimestampSeconds}
+              renderTooltip={(point) =>
+                `${formatTimestamp(point.chat.peakTimestampSeconds)} 直近10秒: ${point.chat.messageCount10s}件`
+              }
+              onSeek={seekTimeline}
+            />
           </div>
         ) : null}
       </div>
@@ -334,11 +594,17 @@ export default function HighlightsExplorer({
                   {moment.thumbnailUrl ? (
                     <div className="momentThumbnail">
                       <Image
-                        src={moment.thumbnailUrl}
+                        src={resolveThumbnailUrl(moment.thumbnailUrl)}
+                        unoptimized
                         alt={`${moment.timestamp}付近の見どころ候補サムネイル`}
                         fill
                         sizes="(max-width: 720px) 100vw, 150px"
                         style={{ objectFit: 'cover' }}
+                        onError={(event) => {
+                          event.currentTarget
+                            .closest('.momentThumbnail')
+                            ?.setAttribute('hidden', '');
+                        }}
                       />
                     </div>
                   ) : null}

@@ -59,6 +59,27 @@ export class HighlightStorageService {
     return `highlights/${vodId}/`;
   }
 
+  getThumbnailObjectKey(vodId: string, timestampSeconds: number): string {
+    return `${this.getThumbnailPrefix(vodId)}${this.normalizeTimestampSeconds(timestampSeconds)}.webp`;
+  }
+
+  getThumbnailPrefix(vodId: string): string {
+    return `highlights/${vodId}/thumbnails/`;
+  }
+
+  getLocalThumbnailPath(
+    vodId: string,
+    timestampSeconds: number,
+    localDirectory = this.getLocalAnalysisDirectory(),
+  ): string {
+    return join(
+      localDirectory,
+      vodId,
+      'thumbnails',
+      `${this.normalizeTimestampSeconds(timestampSeconds)}.webp`,
+    );
+  }
+
   isR2Enabled(): boolean {
     return this.getR2ConfigOrNull() !== null;
   }
@@ -147,6 +168,79 @@ export class HighlightStorageService {
     await unlink(filePath);
 
     return [filePath];
+  }
+
+  async putThumbnail(
+    vodId: string,
+    timestampSeconds: number,
+    data: Buffer,
+    localDirectory = this.getLocalAnalysisDirectory(),
+  ): Promise<string> {
+    const timestamp = this.normalizeTimestampSeconds(timestampSeconds);
+
+    if (this.isR2Enabled()) {
+      return this.putR2Thumbnail(vodId, timestamp, data);
+    }
+
+    const filePath = this.getLocalThumbnailPath(vodId, timestamp, localDirectory);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, data);
+
+    return filePath;
+  }
+
+  async getThumbnail(
+    vodId: string,
+    timestampSeconds: number,
+    localDirectory = this.getLocalAnalysisDirectory(),
+  ): Promise<Buffer | null> {
+    const timestamp = this.normalizeTimestampSeconds(timestampSeconds);
+
+    if (this.isR2Enabled()) {
+      return this.getR2Thumbnail(vodId, timestamp);
+    }
+
+    try {
+      return await readFile(
+        this.getLocalThumbnailPath(vodId, timestamp, localDirectory),
+      );
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        return null;
+      }
+
+      throw new InternalServerErrorException(
+        `Local thumbnail read failed: ${vodId}/${timestamp}`,
+        { cause: error },
+      );
+    }
+  }
+
+  async listThumbnailTimestamps(
+    vodId: string,
+    localDirectory = this.getLocalAnalysisDirectory(),
+  ): Promise<Set<number>> {
+    if (this.isR2Enabled()) {
+      return this.listR2ThumbnailTimestamps(vodId);
+    }
+
+    const thumbnailDirectory = join(localDirectory, vodId, 'thumbnails');
+    const entries = await this.readLocalEntries(thumbnailDirectory);
+    const timestamps = new Set<number>();
+
+    for (const entry of entries) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const match = entry.name.match(/^(\d+)\.webp$/);
+
+      if (match) {
+        timestamps.add(Number(match[1]));
+      }
+    }
+
+    return timestamps;
   }
 
   async collectLocalUploadCandidates(
@@ -313,6 +407,66 @@ export class HighlightStorageService {
     return key;
   }
 
+  private async putR2Thumbnail(
+    vodId: string,
+    timestampSeconds: number,
+    data: Buffer,
+  ): Promise<string> {
+    const key = this.getThumbnailObjectKey(vodId, timestampSeconds);
+
+    try {
+      await this.getS3Client().send(
+        new PutObjectCommand({
+          Bucket: this.getRequiredR2Config().bucket,
+          Key: key,
+          Body: data,
+          ContentType: 'image/webp',
+        }),
+      );
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `R2 thumbnail upload failed: ${key}`,
+        { cause: error },
+      );
+    }
+
+    return key;
+  }
+
+  private async getR2Thumbnail(
+    vodId: string,
+    timestampSeconds: number,
+  ): Promise<Buffer | null> {
+    const key = this.getThumbnailObjectKey(vodId, timestampSeconds);
+
+    try {
+      const response = await this.getS3Client().send(
+        new GetObjectCommand({
+          Bucket: this.getRequiredR2Config().bucket,
+          Key: key,
+        }),
+      );
+      const bytes = await response.Body?.transformToByteArray();
+
+      if (!bytes) {
+        throw new InternalServerErrorException(
+          `R2 thumbnail body was empty: ${key}`,
+        );
+      }
+
+      return Buffer.from(bytes);
+    } catch (error) {
+      if (isMissingObjectError(error)) {
+        return null;
+      }
+
+      throw new InternalServerErrorException(
+        `R2 thumbnail read failed: ${key}`,
+        { cause: error },
+      );
+    }
+  }
+
   private async listR2AnalysisRefs(): Promise<AnalysisRef[]> {
     const config = this.getRequiredR2Config();
     const refs = new Map<string, AnalysisRef>();
@@ -405,6 +559,45 @@ export class HighlightStorageService {
     return deleted;
   }
 
+  private async listR2ThumbnailTimestamps(vodId: string): Promise<Set<number>> {
+    const config = this.getRequiredR2Config();
+    const prefix = this.getThumbnailPrefix(vodId);
+    const timestamps = new Set<number>();
+    let continuationToken: string | undefined;
+
+    do {
+      const response = await this.getS3Client().send(
+        new ListObjectsV2Command({
+          Bucket: config.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+
+      for (const object of response.Contents ?? []) {
+        const key = object.Key;
+
+        if (typeof key !== 'string') {
+          continue;
+        }
+
+        const match = key.match(
+          new RegExp(`^${escapeRegExp(prefix)}(\\d+)\\.webp$`),
+        );
+
+        if (match) {
+          timestamps.add(Number(match[1]));
+        }
+      }
+
+      continuationToken = response.IsTruncated
+        ? response.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+
+    return timestamps;
+  }
+
   private getS3Client(): S3Client {
     if (!this.s3Client) {
       const config = this.getRequiredR2Config();
@@ -465,6 +658,16 @@ export class HighlightStorageService {
       : join(this.getLocalAnalysisDirectory(), `${vodId}.json`);
   }
 
+  private normalizeTimestampSeconds(timestampSeconds: number): number {
+    if (!Number.isFinite(timestampSeconds)) {
+      throw new InternalServerErrorException(
+        `Invalid thumbnail timestamp: ${timestampSeconds}`,
+      );
+    }
+
+    return Math.max(0, Math.floor(timestampSeconds));
+  }
+
   private findDefaultAnalysisDirectory(startDirectory: string): string | null {
     let current = resolve(startDirectory);
 
@@ -514,4 +717,8 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

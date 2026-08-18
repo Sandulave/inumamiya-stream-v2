@@ -128,6 +128,8 @@ class SampleMetrics:
     chat_json_score: float = 0.0
     audio_db: float = -100.0
     audio_delta: float = 0.0
+    audio_eligible: bool = True
+    audio_eligible_delta: float = 0.0
     audio_level_score: float = 0.0
     audio_spike_score: float = 0.0
     highlight_score: float = 0.0
