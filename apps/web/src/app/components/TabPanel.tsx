@@ -4,6 +4,7 @@ import { KeyboardEvent, ReactNode, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { games, pcSpecs, profileLinks, qrLinks } from '../../data/streamerData';
+import FeedbackBoard from './FeedbackBoard';
 
 type TwitchClip = {
   id: string;
@@ -64,6 +65,7 @@ const tabs = [
   { id: 'links', label: 'リンク' },
   { id: 'games', label: 'ゲーム' },
   { id: 'pcspec', label: 'PC SPEC' },
+  { id: 'feedback', label: 'ご意見・不具合' },
 ] as const;
 
 type TabId = (typeof tabs)[number]['id'];
@@ -631,29 +633,37 @@ export default function TabPanel({
           {displayedVideos.map((video) => {
             const isPlaying = selectedVideoId === video.id;
             const canPlay = Boolean(onSelectArchive);
+            const archiveHref = `/archives/${encodeURIComponent(video.id)}`;
+            const highlightsHref = `${archiveHref}?view=highlights`;
 
             return (
               <article
                 key={video.id}
                 className={`archiveCardWrapper playableCard ${canPlay ? 'canPlay' : 'isDisabled'} ${isPlaying ? 'isPlaying' : ''}`}
-                role={canPlay ? 'button' : undefined}
-                tabIndex={canPlay ? 0 : undefined}
-                aria-disabled={canPlay ? undefined : true}
-                onClick={canPlay ? () => onSelectArchive?.(video.id) : undefined}
-                onKeyDown={
-                  canPlay
-                    ? (event) => onPlayableCardKeyDown(event, () => onSelectArchive?.(video.id))
-                    : undefined
-                }
               >
                 <div className="archiveCard">
-                  <VideoThumbnail
-                    src={formatVideoThumbnail(video.thumbnail_url)}
-                    alt={video.title}
-                    sizes="(max-width: 768px) 100vw, 320px"
-                  />
+                  <button
+                    type="button"
+                    className="archiveThumbnailLink"
+                    aria-label={`${video.title} を見る`}
+                    disabled={!canPlay}
+                    onClick={() => onSelectArchive?.(video.id)}
+                  >
+                    <VideoThumbnail
+                      src={formatVideoThumbnail(video.thumbnail_url)}
+                      alt={video.title}
+                      sizes="(max-width: 768px) 100vw, 320px"
+                    />
+                  </button>
                   <div className="clipInfo">
-                    <p className="clipTitle">{video.title}</p>
+                    <button
+                      type="button"
+                      className="clipTitle archiveTitleLink"
+                      disabled={!canPlay}
+                      onClick={() => onSelectArchive?.(video.id)}
+                    >
+                      {video.title}
+                    </button>
                     <p className="clipMeta">公開: {formatVideoDate(video.published_at)}</p>
                     <p className="clipMeta">長さ: {formatDuration(video.duration)}</p>
                     <p className="clipMeta">再生数: {video.view_count} 回</p>
@@ -663,9 +673,18 @@ export default function TabPanel({
                   {isPlaying ? (
                     <span className="playingBadge">再生中</span>
                   ) : null}
+                  <button
+                    type="button"
+                    className="highlightExploreLink archiveWatchLink"
+                    disabled={!canPlay}
+                    onClick={() => onSelectArchive?.(video.id)}
+                  >
+                    <span aria-hidden="true">▶</span>
+                    見る
+                  </button>
                   <Link
-                    href={`/archives/${encodeURIComponent(video.id)}/highlights`}
-                    className="highlightExploreLink"
+                    href={highlightsHref}
+                    className="highlightExploreLink archiveHighlightLink"
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
                   >
@@ -873,6 +892,7 @@ export default function TabPanel({
         </div>
       </section>
     ),
+    feedback: <FeedbackBoard />,
   } satisfies Record<TabId, ReactNode>;
 
   return (

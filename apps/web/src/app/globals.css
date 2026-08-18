@@ -565,7 +565,8 @@ button:focus-visible {
 .archiveSection,
 .linkTabSection,
 .gameSection,
-.pcSpecSection {
+.pcSpecSection,
+.feedbackSection {
   display: grid;
   gap: 1rem;
 }
@@ -606,7 +607,8 @@ button:focus-visible {
 .linkGrid,
 .qrGrid,
 .gameGrid,
-.pcSpecGrid {
+.pcSpecGrid,
+.feedbackPosts {
   display: grid;
   gap: 1rem;
   grid-template-columns: 1fr;
@@ -617,7 +619,9 @@ button:focus-visible {
 .linkCard,
 .qrCard,
 .gameCard,
-.pcSpecCard {
+.pcSpecCard,
+.feedbackForm,
+.feedbackPostCard {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius);
@@ -635,7 +639,9 @@ button:focus-visible {
 .linkCard::before,
 .qrCard::before,
 .gameCard::before,
-.pcSpecCard::before {
+.pcSpecCard::before,
+.feedbackForm::before,
+.feedbackPostCard::before {
   content: "";
   position: absolute;
   inset: 0 0 auto;
@@ -650,7 +656,8 @@ button:focus-visible {
 .linkCard:hover,
 .qrCard:hover,
 .gameCard:hover,
-.pcSpecCard:hover {
+.pcSpecCard:hover,
+.feedbackPostCard:hover {
   transform: translateY(-3px);
   border-color: rgba(183, 140, 255, 0.42);
   box-shadow: 0 26px 68px rgba(0, 0, 0, 0.32), 0 0 34px rgba(139, 92, 246, 0.13);
@@ -757,6 +764,62 @@ button:focus-visible {
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: center;
+}
+
+.archiveThumbnailLink,
+.archiveTitleLink {
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+}
+
+.archiveThumbnailLink {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.archiveThumbnailLink:disabled,
+.archiveTitleLink:disabled {
+  cursor: default;
+}
+
+.archiveTitleLink {
+  display: -webkit-box;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: left;
+}
+
+.archiveTitleLink:hover {
+  color: #20202a;
+  text-decoration: underline;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.18em;
+}
+
+.archiveHighlightLink {
+  background: #fff7c2;
+}
+
+.archiveHighlightLink:hover {
+  background: var(--accent-yellow);
+}
+
+.playableCard.isPlaying .archiveWatchLink {
+  display: none;
 }
 
 .playingBadge {
@@ -1119,6 +1182,129 @@ button:focus-visible {
 
 .gameCardDescription {
   margin-top: 0.65rem;
+}
+
+.feedbackLead {
+  margin: 0.35rem 0 0;
+  line-height: 1.65;
+}
+
+.feedbackForm {
+  gap: 0.9rem;
+  padding: 1.25rem;
+}
+
+.feedbackField {
+  display: grid;
+  gap: 0.45rem;
+  color: #20202a;
+  font-weight: 1000;
+}
+
+.feedbackField input,
+.feedbackField textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.75rem 0.85rem;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  color: #20202a;
+  background: #fffdf5;
+  font: inherit;
+  font-weight: 750;
+  outline: none;
+}
+
+.feedbackField textarea {
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.feedbackField input:focus,
+.feedbackField textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 4px rgba(99, 199, 255, 0.18);
+}
+
+.feedbackFormFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.feedbackFormFooter span {
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.feedbackFormFooter button {
+  display: inline-flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.62rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  color: #20202a;
+  background: var(--accent-yellow);
+  box-shadow: 4px 4px 0 rgba(32, 32, 42, 0.13);
+  font: inherit;
+  font-weight: 1000;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.feedbackFormFooter button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.feedbackStatus,
+.feedbackEmpty {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 850;
+  line-height: 1.65;
+}
+
+.feedbackPosts {
+  grid-template-columns: 1fr;
+}
+
+.feedbackPostCard {
+  gap: 0.8rem;
+  min-height: 0;
+  padding: 1.35rem 1.25rem 1rem;
+}
+
+.feedbackPostHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.feedbackPostHeader strong {
+  min-width: 0;
+  color: #20202a;
+  overflow-wrap: anywhere;
+}
+
+.feedbackPostHeader time {
+  flex: 0 0 auto;
+  font-size: 0.86rem;
+}
+
+.feedbackPostCard p {
+  margin: 0;
+  color: #20202a;
+  font-weight: 750;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .gamePlayButton {
@@ -1777,7 +1963,9 @@ button:focus-visible {
 .linkCard,
 .qrCard,
 .gameCard,
-.pcSpecCard {
+.pcSpecCard,
+.feedbackForm,
+.feedbackPostCard {
   border: 2px solid var(--border);
   border-radius: 18px;
   color: #20202a;
@@ -1798,7 +1986,9 @@ button:focus-visible {
 .linkCard::before,
 .qrCard::before,
 .gameCard::before,
-.pcSpecCard::before {
+.pcSpecCard::before,
+.feedbackForm::before,
+.feedbackPostCard::before {
   height: 8px;
   opacity: 1;
   background: var(--accent-yellow);
@@ -1818,6 +2008,7 @@ button:focus-visible {
 .qrCard:hover,
 .gameCard:hover,
 .pcSpecCard:hover,
+.feedbackPostCard:hover,
 .playableCard.canPlay:hover .archiveCard,
 .playableCard.canPlay:hover .clipCard,
 .playableCard.canPlay:focus-visible .archiveCard,
@@ -1857,7 +2048,9 @@ button:focus-visible {
 .clipMeta,
 .linkCardDescription,
 .gameCardDescription,
-.pcSpecList li {
+.pcSpecList li,
+.feedbackLead,
+.feedbackPostHeader time {
   color: var(--muted);
   font-weight: 650;
 }
@@ -2020,6 +2213,110 @@ button:focus-visible {
 
 .highlightPage {
   width: min(100%, 1560px);
+}
+
+.archiveDetailShell {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.archiveDetailContent {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.archiveDetailPlayerColumn {
+  display: grid;
+  min-width: 0;
+  gap: 0.85rem;
+}
+
+.archiveDetailPlayer {
+  margin: 0;
+}
+
+.archiveModeSwitch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 2px solid var(--border);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.archiveModeButton {
+  display: inline-flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.62rem 0.95rem;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  color: #20202a;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 rgba(32, 32, 42, 0.12);
+  font: inherit;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.archiveModeButton:hover,
+.archiveModeButton.active {
+  color: #20202a;
+  background: var(--accent-yellow);
+  transform: translateY(-1px);
+}
+
+.archiveOverviewPanel {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 2vw, 1.25rem);
+  border: 2px solid var(--border);
+  border-radius: 24px;
+  color: #20202a;
+  background: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.archiveOverviewPanel h2 {
+  margin: 0;
+  color: #20202a;
+  font-size: clamp(1.4rem, 2.7vw, 2.2rem);
+  font-weight: 1000;
+  line-height: 1.25;
+}
+
+.archiveOverviewMeta {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.archiveOverviewMeta div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.8rem;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: #fffdf5;
+}
+
+.archiveOverviewMeta dt {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.archiveOverviewMeta dd {
+  margin: 0;
+  color: #20202a;
+  font-weight: 1000;
+  overflow-wrap: anywhere;
 }
 
 .highlightHeader,
@@ -2600,8 +2897,59 @@ button:focus-visible {
 }
 
 .watchMomentButton {
+  display: inline-flex;
   width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
   background: var(--accent-yellow);
+  white-space: nowrap;
+}
+
+.momentCardActions {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: stretch;
+  width: 100%;
+}
+
+.shareMomentButton {
+  display: inline-flex;
+  width: auto;
+  min-width: max-content;
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  padding: 0.55rem 0.9rem;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  color: #20202a;
+  background: #ffffff;
+  box-shadow: 4px 4px 0 rgba(32, 32, 42, 0.13);
+  font: inherit;
+  font-weight: 1000;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.shareMomentButton:hover {
+  color: #20202a;
+  background: #e9f9ff;
+  box-shadow: 6px 6px 0 rgba(32, 32, 42, 0.13);
+  transform: translateY(-1px);
+}
+
+.shareMomentFeedback {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 900;
+  text-align: center;
 }
 
 .highlightEmptyState,
@@ -2841,4 +3189,79 @@ button:focus-visible {
     gap: 0.25rem;
   }
 
+}
+
+@media (min-width: 1100px) {
+  .highlightPage {
+    width: min(100%, 1500px);
+  }
+
+  .highlightPage .highlightHeader h1 {
+    display: -webkit-box;
+    max-width: 100%;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    white-space: normal;
+  }
+
+  .archiveModeSwitch {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .archiveDetailContent.isArchive {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .archiveDetailContent.isArchive .archiveOverviewMeta {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .archiveDetailContent.isHighlights {
+    position: relative;
+    display: block;
+    padding-right: 440px;
+  }
+
+  .archiveDetailContent.isHighlights > .archiveDetailPlayerColumn {
+    width: 100%;
+  }
+
+  .archiveDetailContent.isHighlights > .highlightExplorerLayout {
+    display: contents;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .archiveDetailContent.isHighlights .highlightPlayerColumn {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    margin-top: 0.85rem;
+  }
+
+  .archiveDetailContent.isHighlights .highlightListPanel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 420px;
+    min-width: 0;
+    max-height: calc(100vh - 1rem);
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+
+  .archiveDetailContent.isHighlights .momentCard.hasThumbnail {
+    grid-template-columns: minmax(9.5rem, 38%) minmax(0, 1fr);
+  }
+
+  .archiveDetailContent.isHighlights .watchMomentButton,
+  .archiveDetailContent.isHighlights .shareMomentButton {
+    white-space: nowrap;
+  }
 }

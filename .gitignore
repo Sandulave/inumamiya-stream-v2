@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+apps/api/data/
 *.log
 tools/highlight-worker-temp/
 tools/highlight-analyzer/.venv/

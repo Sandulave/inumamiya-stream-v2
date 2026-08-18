@@ -1,13 +1,12 @@
 "use client";
 
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import TwitchPlayerFrame from '../../../components/TwitchPlayerFrame';
 import {
-  HighlightFilters,
   HighlightChapter,
   HighlightChaptersResponse,
+  HighlightFilters,
   HighlightMoment,
   HighlightMomentsResponse,
   HighlightSort,
@@ -17,12 +16,16 @@ import {
 
 type Props = {
   vodId: string;
-  parentHost: string;
   filters: HighlightFilters;
   resultStatus: 'ok' | 'not-found' | 'error';
   momentsResponse: HighlightMomentsResponse | null;
   timelineResponse: HighlightTimelineResponse | null;
   chaptersResponse: HighlightChaptersResponse | null;
+  selectedMomentSeconds?: number;
+  shareFeedbackMomentSeconds?: number | null;
+  onSelectMoment: (moment: HighlightMoment) => void;
+  onSeek: (timestampSeconds: number) => void;
+  onShareMoment: (moment: HighlightMoment) => void;
 };
 
 const sortOptions: { value: HighlightSort; label: string }[] = [
@@ -33,7 +36,6 @@ const sortOptions: { value: HighlightSort; label: string }[] = [
 ];
 
 const starFilterOptions = [0, 1, 2, 3, 4, 5];
-const PLAYBACK_LEAD_SECONDS = 5;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 function Stars({ value, label }: { value: number; label: string }) {
@@ -44,7 +46,10 @@ function Stars({ value, label }: { value: number; label: string }) {
       className={`starRating ${safeValue === 0 ? 'isQuiet' : ''}`}
       aria-label={`${label}: ${safeValue} / 5`}
     >
-      <span aria-hidden="true">{'★'.repeat(safeValue)}{'☆'.repeat(5 - safeValue)}</span>
+      <span aria-hidden="true">
+        {'★'.repeat(safeValue)}
+        {'☆'.repeat(5 - safeValue)}
+      </span>
     </span>
   );
 }
@@ -63,10 +68,6 @@ function formatDuration(seconds: number) {
   }
 
   return `${remainingSeconds}秒`;
-}
-
-function getPlaybackStart(moment: HighlightMoment) {
-  return Math.max(0, Math.floor(moment.timestampSeconds - PLAYBACK_LEAD_SECONDS));
 }
 
 function formatTimestamp(seconds: number) {
@@ -119,8 +120,8 @@ function buildAreaPath(
 
     return `${index === 0 ? 'M' : 'L'} ${x.toFixed(3)} ${y.toFixed(3)}`;
   });
-
-  const lastX = (points.at(-1)?.timestampSeconds ?? durationSeconds) / durationSeconds * 100;
+  const lastX =
+    ((points.at(-1)?.timestampSeconds ?? durationSeconds) / durationSeconds) * 100;
   const firstX = (points[0].timestampSeconds / durationSeconds) * 100;
 
   return `${commands.join(' ')} L ${lastX.toFixed(3)} 96 L ${firstX.toFixed(3)} 96 Z`;
@@ -159,13 +160,11 @@ function TimelineGraph({
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const timestamp = ratio * durationSeconds;
 
-    return (
-      points.reduce((closest, point) =>
-        Math.abs(point.timestampSeconds - timestamp) <
-        Math.abs(closest.timestampSeconds - timestamp)
-          ? point
-          : closest,
-      ) ?? null
+    return points.reduce((closest, point) =>
+      Math.abs(point.timestampSeconds - timestamp) <
+      Math.abs(closest.timestampSeconds - timestamp)
+        ? point
+        : closest,
     );
   }
 
@@ -276,39 +275,32 @@ function ChapterStrip({
 
 export default function HighlightsExplorer({
   vodId,
-  parentHost,
   filters,
   resultStatus,
   momentsResponse,
   timelineResponse,
   chaptersResponse,
+  selectedMomentSeconds,
+  shareFeedbackMomentSeconds,
+  onSelectMoment,
+  onSeek,
+  onShareMoment,
 }: Props) {
   const router = useRouter();
-  const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const infoPopoverRef = useRef<HTMLDivElement>(null);
+  const selectedCardRef = useRef<HTMLElement | null>(null);
   const moments = useMemo(
     () => momentsResponse?.moments ?? [],
     [momentsResponse],
   );
-  const [selectedMomentSeconds, setSelectedMomentSeconds] = useState(
-    moments[0]?.timestampSeconds,
-  );
-  const [requestedStartSeconds, setRequestedStartSeconds] = useState(
-    moments[0] ? getPlaybackStart(moments[0]) : 0,
-  );
-  const [playbackRequestId, setPlaybackRequestId] = useState(0);
-
   const selectedMoment = useMemo(() => {
     return (
       moments.find((moment) => moment.timestampSeconds === selectedMomentSeconds) ??
-      moments[0] ??
       null
     );
   }, [moments, selectedMomentSeconds]);
-
-  const playerStartSeconds = requestedStartSeconds;
 
   useEffect(() => {
     if (!isInfoOpen) {
@@ -339,12 +331,20 @@ export default function HighlightsExplorer({
     };
   }, [isInfoOpen]);
 
+  useEffect(() => {
+    selectedCardRef.current?.scrollIntoView({
+      block: 'nearest',
+      behavior: 'smooth',
+    });
+  }, [selectedMomentSeconds]);
+
   function updateQuery(next: Partial<HighlightFilters>) {
     const merged = {
       ...filters,
       ...next,
     };
     const params = new URLSearchParams();
+    params.set('view', 'highlights');
 
     if (merged.sort !== 'timestamp') {
       params.set('sort', merged.sort);
@@ -362,27 +362,24 @@ export default function HighlightsExplorer({
       params.set('hasClips', String(merged.hasClips));
     }
 
+    if (selectedMomentSeconds !== undefined) {
+      params.set('moment', String(Math.floor(selectedMomentSeconds)));
+    }
+
     startTransition(() => {
-      router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
+      router.replace(`/archives/${encodeURIComponent(vodId)}?${params.toString()}`);
     });
   }
 
-  function selectMoment(moment: HighlightMoment) {
-    setSelectedMomentSeconds(moment.timestampSeconds);
-    setRequestedStartSeconds(getPlaybackStart(moment));
-    setPlaybackRequestId((current) => current + 1);
-  }
-
   function seekTimeline(timestampSeconds: number) {
-    setRequestedStartSeconds(Math.max(0, Math.floor(timestampSeconds)));
-    setPlaybackRequestId((current) => current + 1);
+    onSeek(Math.max(0, Math.floor(timestampSeconds)));
   }
 
   if (resultStatus === 'not-found') {
     return (
       <section className="highlightEmptyState">
         <h2>この配信はまだ見どころ解析されていません</h2>
-        <p>解析JSONが用意されると、ここに音の変化やチャット反応が表示されます。</p>
+        <p>解析JSONが用意されると、音の変化やチャット反応が表示されます。</p>
       </section>
     );
   }
@@ -399,16 +396,6 @@ export default function HighlightsExplorer({
   return (
     <section className="highlightExplorerLayout" aria-busy={isPending}>
       <div className="highlightPlayerColumn">
-        <div className="highlightPlayerShell">
-          <TwitchPlayerFrame
-            key={`${vodId}-${playerStartSeconds}-${playbackRequestId}`}
-            type="vod"
-            id={vodId}
-            parentHost={parentHost}
-            startSeconds={playerStartSeconds}
-            title="Twitchアーカイブプレイヤー"
-          />
-        </div>
         {selectedMoment ? (
           <div className="selectedMomentSummary">
             <span className="selectedMomentBadge">選択中</span>
@@ -478,7 +465,7 @@ export default function HighlightsExplorer({
                 onClick={() => setIsInfoOpen((current) => !current)}
                 onFocus={() => setIsInfoOpen(true)}
               >
-                ⓘ 解析のしくみ
+                解析のしくみ
               </button>
               {isInfoOpen ? (
                 <div
@@ -489,22 +476,21 @@ export default function HighlightsExplorer({
                 >
                   <h3>見どころ探索について</h3>
                   <p>
-                    配信中の音の変化とチャットの反応を解析し、変化が大きかった場所を探しやすくしています。
+                    配信中の音の変化とチャットの反応を解析し、変化が大きかった場面を探しやすくしています。
                   </p>
                   <dl>
                     <div>
                       <dt>音の変化</dt>
-                      <dd>普段より急に音が大きくなった場所</dd>
+                      <dd>普段より急に音が大きくなった場面</dd>
                     </div>
                     <div>
                       <dt>チャット反応</dt>
-                      <dd>短時間にコメントが増えた場所</dd>
+                      <dd>短時間にコメントが増えた場面</dd>
                     </div>
                   </dl>
                   <p>
-                    ★は面白さやおすすめ度ではなく、このアーカイブ内での相対的な変化の強さです。
+                    星は面白さやおすすめ度ではなく、このアーカイブ内での相対的な変化の強さです。
                   </p>
-                  <p>見どころは前後の流れが分かるよう、少し前から再生します。</p>
                 </div>
               ) : null}
             </div>
@@ -583,12 +569,12 @@ export default function HighlightsExplorer({
         ) : (
           <div className="momentList">
             {moments.map((moment) => {
-              const isSelected =
-                selectedMoment?.timestampSeconds === moment.timestampSeconds;
+              const isSelected = selectedMoment?.timestampSeconds === moment.timestampSeconds;
 
               return (
                 <article
                   key={`${moment.timestampSeconds}-${moment.timestamp}`}
+                  ref={isSelected ? selectedCardRef : undefined}
                   className={`momentCard ${isSelected ? 'isSelected' : ''} ${moment.thumbnailUrl ? 'hasThumbnail' : ''}`}
                 >
                   {moment.thumbnailUrl ? (
@@ -596,7 +582,7 @@ export default function HighlightsExplorer({
                       <Image
                         src={resolveThumbnailUrl(moment.thumbnailUrl)}
                         unoptimized
-                        alt={`${moment.timestamp}付近の見どころ候補サムネイル`}
+                        alt={`${moment.timestamp}付近の見どころサムネイル`}
                         fill
                         sizes="(max-width: 720px) 100vw, 150px"
                         style={{ objectFit: 'cover' }}
@@ -664,14 +650,27 @@ export default function HighlightsExplorer({
                       </div>
                     ) : null}
 
+                  </div>
+                  <div className="momentCardActions">
                     <button
                       type="button"
                       className="watchMomentButton"
-                      onClick={() => selectMoment(moment)}
+                      onClick={() => onSelectMoment(moment)}
                     >
-                      ここから見る
+                      ▶ ここから見る
+                    </button>
+                    <button
+                      type="button"
+                      className="shareMomentButton"
+                      onClick={() => onShareMoment(moment)}
+                    >
+                      <span aria-hidden="true">🔗</span>
+                      共有
                     </button>
                   </div>
+                  {shareFeedbackMomentSeconds === moment.timestampSeconds ? (
+                    <p className="shareMomentFeedback">リンクをコピーしました</p>
+                  ) : null}
                 </article>
               );
             })}
