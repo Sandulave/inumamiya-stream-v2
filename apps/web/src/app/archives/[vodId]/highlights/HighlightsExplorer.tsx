@@ -37,7 +37,6 @@ const sortOptions: { value: HighlightSort; label: string }[] = [
 
 const starFilterOptions = [0, 1, 2, 3, 4, 5];
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-
 function Stars({ value, label }: { value: number; label: string }) {
   const safeValue = Math.min(Math.max(Math.floor(value), 0), 5);
 
@@ -107,22 +106,39 @@ function buildAreaPath(
   points: HighlightTimelinePoint[],
   durationSeconds: number,
   getValue: (point: HighlightTimelinePoint) => number,
+  startSeconds = 0,
+  endSeconds = durationSeconds,
 ) {
-  if (points.length === 0 || durationSeconds <= 0) {
+  const rangeSeconds = endSeconds - startSeconds;
+
+  if (points.length === 0 || durationSeconds <= 0 || rangeSeconds <= 0) {
     return '';
   }
 
   const top = 8;
   const bottom = 92;
-  const commands = points.map((point, index) => {
-    const x = (point.timestampSeconds / durationSeconds) * 100;
+  const visiblePoints = points.filter(
+    (point) =>
+      point.timestampSeconds >= startSeconds &&
+      point.timestampSeconds <= endSeconds,
+  );
+
+  if (visiblePoints.length === 0) {
+    return '';
+  }
+
+  const commands = visiblePoints.map((point, index) => {
+    const x = ((point.timestampSeconds - startSeconds) / rangeSeconds) * 100;
     const y = bottom - (Math.max(0, Math.min(100, getValue(point))) / 100) * (bottom - top);
 
     return `${index === 0 ? 'M' : 'L'} ${x.toFixed(3)} ${y.toFixed(3)}`;
   });
   const lastX =
-    ((points.at(-1)?.timestampSeconds ?? durationSeconds) / durationSeconds) * 100;
-  const firstX = (points[0].timestampSeconds / durationSeconds) * 100;
+    (((visiblePoints.at(-1)?.timestampSeconds ?? endSeconds) - startSeconds) /
+      rangeSeconds) *
+    100;
+  const firstX =
+    ((visiblePoints[0].timestampSeconds - startSeconds) / rangeSeconds) * 100;
 
   return `${commands.join(' ')} L ${lastX.toFixed(3)} 96 L ${firstX.toFixed(3)} 96 Z`;
 }
@@ -149,16 +165,71 @@ function TimelineGraph({
   onSeek: (timestampSeconds: number) => void;
 }) {
   const [hovered, setHovered] = useState<HighlightTimelinePoint | null>(null);
+  const [focusCenterSeconds, setFocusCenterSeconds] = useState<number | null>(
+    null,
+  );
+  const [previewCenterSeconds, setPreviewCenterSeconds] = useState<
+    number | null
+  >(null);
+  const [isMainSelecting, setIsMainSelecting] = useState(false);
   const path = buildAreaPath(points, durationSeconds, getValue);
+  const lensCenterSeconds = focusCenterSeconds ?? previewCenterSeconds;
   const selectedX =
     selectedMomentSeconds !== undefined && durationSeconds > 0
       ? (selectedMomentSeconds / durationSeconds) * 100
       : null;
+  const focusWindowSeconds = Math.max(
+    90,
+    Math.min(360, durationSeconds * 0.035),
+  );
+  const focusStartSeconds =
+    lensCenterSeconds === null
+      ? 0
+      : Math.max(0, lensCenterSeconds - focusWindowSeconds / 2);
+  const focusEndSeconds =
+    lensCenterSeconds === null
+      ? 0
+      : Math.min(durationSeconds, focusStartSeconds + focusWindowSeconds);
+  const normalizedFocusStartSeconds =
+    lensCenterSeconds === null
+      ? 0
+      : Math.max(0, focusEndSeconds - focusWindowSeconds);
+  const lensPath =
+    lensCenterSeconds === null
+      ? ''
+      : buildAreaPath(
+          points,
+          durationSeconds,
+          getValue,
+          normalizedFocusStartSeconds,
+          focusEndSeconds,
+        );
+  const hoveredTimestamp =
+    hovered === null ? null : getPeakTimestamp(hovered);
+  const hoveredLensX =
+    hoveredTimestamp !== null && focusEndSeconds > normalizedFocusStartSeconds
+      ? ((hoveredTimestamp - normalizedFocusStartSeconds) /
+          (focusEndSeconds - normalizedFocusStartSeconds)) *
+        100
+      : null;
+  const focusRangeX =
+    lensCenterSeconds === null || durationSeconds <= 0
+      ? null
+      : {
+          start: (normalizedFocusStartSeconds / durationSeconds) * 100,
+          width:
+            ((focusEndSeconds - normalizedFocusStartSeconds) / durationSeconds) *
+            100,
+        };
 
-  function pickPoint(clientX: number, currentTarget: SVGSVGElement) {
-    const rect = currentTarget.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const timestamp = ratio * durationSeconds;
+  function pickPoint(
+    clientX: number,
+    currentTarget: SVGSVGElement,
+    startSeconds = 0,
+    endSeconds = durationSeconds,
+  ) {
+    const ratio = getPointerRatio(clientX, currentTarget);
+    const timestamp = startSeconds + ratio * (endSeconds - startSeconds);
 
     return points.reduce((closest, point) =>
       Math.abs(point.timestampSeconds - timestamp) <
@@ -168,27 +239,82 @@ function TimelineGraph({
     );
   }
 
+  function getPointerRatio(clientX: number, currentTarget: SVGSVGElement) {
+    const rect = currentTarget.getBoundingClientRect();
+
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  }
+
+  function updateMainSelection(
+    clientX: number,
+    currentTarget: SVGSVGElement,
+  ) {
+    const point = pickPoint(clientX, currentTarget);
+
+    setHovered(point);
+    setFocusCenterSeconds(point.timestampSeconds);
+  }
+
   return (
-    <div className={`timelineGraph timelineGraph-${tone}`}>
+    <div
+      className={`timelineGraph timelineGraph-${tone}`}
+      onPointerLeave={() => {
+        setHovered(null);
+        setFocusCenterSeconds(null);
+        setPreviewCenterSeconds(null);
+        setIsMainSelecting(false);
+      }}
+    >
       <div className="timelineGraphTop">
         <h3>{title}</h3>
         {hovered ? (
           <span className="timelineTooltip">{renderTooltip(hovered)}</span>
         ) : null}
       </div>
+      <p className="timelineGuide">
+        上のバーをドラッグして範囲を選び、下の拡大バーをクリックして再生位置を合わせます。
+      </p>
       <svg
         viewBox="0 0 100 100"
         role="img"
         aria-label={title}
         preserveAspectRatio="none"
-        onPointerMove={(event) => setHovered(pickPoint(event.clientX, event.currentTarget))}
-        onPointerLeave={() => setHovered(null)}
-        onClick={(event) => {
+        onPointerMove={(event) => {
           const point = pickPoint(event.clientX, event.currentTarget);
-          onSeek(getPeakTimestamp(point));
+          setHovered(point);
+
+          if (isMainSelecting) {
+            setFocusCenterSeconds(point.timestampSeconds);
+            setPreviewCenterSeconds(null);
+          } else if (focusCenterSeconds === null) {
+            setPreviewCenterSeconds(point.timestampSeconds);
+          }
+        }}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setIsMainSelecting(true);
+          setPreviewCenterSeconds(null);
+          updateMainSelection(event.clientX, event.currentTarget);
+        }}
+        onPointerUp={(event) => {
+          setIsMainSelecting(false);
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => {
+          setIsMainSelecting(false);
         }}
       >
         <path className="timelineGridLine" d="M 0 50 L 100 50" />
+        {focusRangeX ? (
+          <rect
+            className="timelineFocusRange"
+            x={focusRangeX.start}
+            y="4"
+            width={focusRangeX.width}
+            height="92"
+            rx="1.8"
+          />
+        ) : null}
         <path className="timelineArea" d={path} />
         {selectedX !== null ? (
           <line
@@ -200,6 +326,62 @@ function TimelineGraph({
           />
         ) : null}
       </svg>
+      <div
+        className={`timelineLens ${lensCenterSeconds !== null ? 'isActive' : ''}`}
+      >
+        <svg
+          viewBox="0 0 100 100"
+          role="img"
+          aria-label={`${title} zoom`}
+          preserveAspectRatio="none"
+          onPointerMove={(event) => {
+            if (lensCenterSeconds === null) {
+              return;
+            }
+
+            const point = pickPoint(
+              event.clientX,
+              event.currentTarget,
+              normalizedFocusStartSeconds,
+              focusEndSeconds,
+            );
+            setHovered(point);
+            if (focusCenterSeconds === null) {
+              setFocusCenterSeconds(lensCenterSeconds);
+              setPreviewCenterSeconds(null);
+            }
+          }}
+          onClick={(event) => {
+            if (lensCenterSeconds === null) {
+              return;
+            }
+
+            const point = pickPoint(
+              event.clientX,
+              event.currentTarget,
+              normalizedFocusStartSeconds,
+              focusEndSeconds,
+            );
+            onSeek(getPeakTimestamp(point));
+          }}
+        >
+          <path className="timelineGridLine" d="M 0 50 L 100 50" />
+          <path className="timelineArea" d={lensPath} />
+          {hoveredLensX !== null ? (
+            <line
+              className="timelineLensMarker"
+              x1={hoveredLensX}
+              x2={hoveredLensX}
+              y1="4"
+              y2="96"
+            />
+          ) : null}
+        </svg>
+        <div className="timelineAxis timelineLensAxis">
+          <span>{formatTimestamp(normalizedFocusStartSeconds)}</span>
+          <span>{formatTimestamp(focusEndSeconds)}</span>
+        </div>
+      </div>
       <div className="timelineAxis">
         <span>0:00</span>
         <span>{formatTimestamp(durationSeconds)}</span>

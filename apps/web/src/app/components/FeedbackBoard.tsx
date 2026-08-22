@@ -22,6 +22,9 @@ export default function FeedbackBoard() {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingPostIds, setDeletingPostIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [status, setStatus] = useState<string | null>(null);
 
   const trimmedMessage = useMemo(() => message.trim(), [message]);
@@ -100,6 +103,35 @@ export default function FeedbackBoard() {
     }
   }
 
+  async function deleteFeedback(postId: string) {
+    setDeletingPostIds((current) => new Set(current).add(postId));
+    setStatus(null);
+
+    try {
+      const response = await fetch(
+        `/api/feedback?id=${encodeURIComponent(postId)}`,
+        {
+          method: 'DELETE',
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      setPosts((current) => current.filter((post) => post.id !== postId));
+      setStatus('削除しました。');
+    } catch {
+      setStatus('削除できませんでした。少し時間をおいて再度お試しください。');
+    } finally {
+      setDeletingPostIds((current) => {
+        const next = new Set(current);
+        next.delete(postId);
+        return next;
+      });
+    }
+  }
+
   function formatPostedAt(value: string) {
     return new Intl.DateTimeFormat('ja-JP', {
       year: 'numeric',
@@ -162,8 +194,18 @@ export default function FeedbackBoard() {
         {posts.map((post) => (
           <article key={post.id} className="feedbackPostCard">
             <div className="feedbackPostHeader">
-              <strong>{post.name}</strong>
-              <time dateTime={post.createdAt}>{formatPostedAt(post.createdAt)}</time>
+              <div>
+                <strong>{post.name}</strong>
+                <time dateTime={post.createdAt}>{formatPostedAt(post.createdAt)}</time>
+              </div>
+              <button
+                type="button"
+                className="feedbackDeleteButton"
+                disabled={deletingPostIds.has(post.id)}
+                onClick={() => void deleteFeedback(post.id)}
+              >
+                {deletingPostIds.has(post.id) ? '削除中...' : '削除'}
+              </button>
             </div>
             <p>{post.message}</p>
           </article>

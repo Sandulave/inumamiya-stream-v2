@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { FeedbackService } from './feedback.service';
 import type { CreateFeedbackInput } from './feedback.types';
 
@@ -14,5 +14,10 @@ export class FeedbackController {
   @Post()
   async createPost(@Body() body: CreateFeedbackInput) {
     return this.feedbackService.createPost(body);
+  }
+
+  @Delete(':id')
+  async deletePost(@Param('id') id: string) {
+    return this.feedbackService.deletePost(id);
   }
 }

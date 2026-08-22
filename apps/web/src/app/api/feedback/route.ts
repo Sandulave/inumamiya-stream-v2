@@ -19,3 +19,21 @@ export async function POST(request: Request) {
 
   return Response.json(await response.json(), { status: response.status });
 }
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return Response.json({ message: 'id is required' }, { status: 400 });
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/feedback/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+
+  return Response.json(await response.json(), { status: response.status });
+}

@@ -7,6 +7,7 @@ describe('FeedbackService', () => {
   const storageService = {
     listPosts: jest.fn<Promise<FeedbackPost[]>, []>(),
     putPost: jest.fn<Promise<string>, [FeedbackPost]>(),
+    deletePost: jest.fn<Promise<void>, [string]>(),
   } as unknown as jest.Mocked<FeedbackStorageService>;
 
   let service: FeedbackService;
@@ -15,6 +16,7 @@ describe('FeedbackService', () => {
     jest.clearAllMocks();
     storageService.listPosts.mockResolvedValue([]);
     storageService.putPost.mockResolvedValue('feedback/posts/test.json');
+    storageService.deletePost.mockResolvedValue(undefined);
     service = new FeedbackService(storageService);
   });
 
@@ -70,5 +72,20 @@ describe('FeedbackService', () => {
     await expect(
       service.createPost({ message: 'a'.repeat(501) }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('deletes a post by id', async () => {
+    await expect(service.deletePost('post-1')).resolves.toEqual({
+      id: 'post-1',
+      deleted: true,
+    });
+    expect(storageService.deletePost).toHaveBeenCalledWith('post-1');
+  });
+
+  it('rejects invalid delete ids', async () => {
+    await expect(service.deletePost('../post-1')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(storageService.deletePost).not.toHaveBeenCalled();
   });
 });

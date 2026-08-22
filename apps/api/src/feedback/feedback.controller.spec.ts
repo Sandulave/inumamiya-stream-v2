@@ -12,6 +12,7 @@ describe('FeedbackController', () => {
   const feedbackService = {
     listPosts: jest.fn<Promise<{ posts: FeedbackPost[] }>, []>(),
     createPost: jest.fn<Promise<FeedbackPost>, [{ name?: string; message: string }]>(),
+    deletePost: jest.fn<Promise<{ id: string; deleted: true }>, [string]>(),
   } as unknown as jest.Mocked<FeedbackService>;
   const controller = new FeedbackController(feedbackService);
 
@@ -31,5 +32,18 @@ describe('FeedbackController', () => {
 
     await expect(controller.createPost(body)).resolves.toBe(post);
     expect(feedbackService.createPost).toHaveBeenCalledWith(body);
+  });
+
+  it('deletes feedback posts', async () => {
+    feedbackService.deletePost.mockResolvedValue({
+      id: 'post-1',
+      deleted: true,
+    });
+
+    await expect(controller.deletePost('post-1')).resolves.toEqual({
+      id: 'post-1',
+      deleted: true,
+    });
+    expect(feedbackService.deletePost).toHaveBeenCalledWith('post-1');
   });
 });

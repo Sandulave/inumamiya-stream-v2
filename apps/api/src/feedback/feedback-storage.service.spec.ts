@@ -1,6 +1,6 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { mkdtemp, readFile, writeFile } from 'fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { FeedbackStorageService } from './feedback-storage.service';
@@ -79,6 +79,20 @@ describe('FeedbackStorageService', () => {
     );
   });
 
+  it('deletes local posts and ignores already missing posts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'feedback-storage-'));
+    const service = new FeedbackStorageService(
+      createConfig({ FEEDBACK_STORAGE_DIR: root }),
+    );
+    const post = createPost('delete-me', '2026-08-18T00:00:00.000Z');
+
+    await service.putPost(post);
+    await service.deletePost(post.id);
+
+    await expect(stat(join(root, 'delete-me.json'))).rejects.toThrow();
+    await expect(service.deletePost(post.id)).resolves.toBeUndefined();
+  });
+
   it('ignores malformed local post files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'feedback-storage-'));
     const service = new FeedbackStorageService(
@@ -109,6 +123,18 @@ describe('FeedbackStorageService', () => {
       Bucket: 'test-bucket',
       Key: 'feedback/posts/abc.json',
       ContentType: 'application/json; charset=utf-8',
+    });
+  });
+
+  it('deletes feedback posts from the feedback R2 prefix', async () => {
+    const service = new FeedbackStorageService(createConfig(createR2Env()));
+    const send = jest.fn().mockResolvedValue({});
+    attachMockS3(service, send);
+
+    await expect(service.deletePost('abc')).resolves.toBeUndefined();
+    expect(getCommandInput(send, 0)).toMatchObject({
+      Bucket: 'test-bucket',
+      Key: 'feedback/posts/abc.json',
     });
   });
 

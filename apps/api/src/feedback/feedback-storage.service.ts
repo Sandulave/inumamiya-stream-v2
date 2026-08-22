@@ -1,4 +1,5 @@
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
@@ -7,7 +8,7 @@ import {
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Dirent } from 'fs';
-import { mkdir, readFile, readdir, rename, writeFile } from 'fs/promises';
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { FeedbackPost } from './feedback.types';
 
@@ -60,6 +61,15 @@ export class FeedbackStorageService {
     return this.putLocalPost(post);
   }
 
+  async deletePost(id: string): Promise<void> {
+    if (this.isR2Enabled()) {
+      await this.deleteR2Post(id);
+      return;
+    }
+
+    await this.deleteLocalPost(id);
+  }
+
   private async listLocalPosts(): Promise<FeedbackPost[]> {
     const directory = this.getLocalPostDirectory();
     const entries = await this.readLocalEntries(directory);
@@ -95,6 +105,18 @@ export class FeedbackStorageService {
     await rename(tempPath, filePath);
 
     return filePath;
+  }
+
+  private async deleteLocalPost(id: string): Promise<void> {
+    const filePath = join(this.getLocalPostDirectory(), `${id}.json`);
+
+    await unlink(filePath).catch((error: unknown) => {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        return;
+      }
+
+      throw error;
+    });
   }
 
   private async readLocalEntries(directory: string): Promise<Dirent[]> {
@@ -189,6 +211,24 @@ export class FeedbackStorageService {
     return key;
   }
 
+  private async deleteR2Post(id: string): Promise<void> {
+    const key = this.getPostObjectKey(id);
+
+    try {
+      await this.getS3Client().send(
+        new DeleteObjectCommand({
+          Bucket: this.getRequiredR2Config().bucket,
+          Key: key,
+        }),
+      );
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `R2 feedback delete failed: ${key}`,
+        { cause: error },
+      );
+    }
+  }
+
   private getS3Client(): S3Client {
     if (!this.s3Client) {
       const config = this.getRequiredR2Config();
@@ -277,6 +317,10 @@ function isMissingObjectError(error: unknown): boolean {
     error.name === 'NotFound' ||
     metadata?.httpStatusCode === 404
   );
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return typeof error === 'object' && error !== null && 'code' in error;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

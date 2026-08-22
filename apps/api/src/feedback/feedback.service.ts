@@ -33,6 +33,14 @@ export class FeedbackService {
     return post;
   }
 
+  async deletePost(id: string): Promise<{ id: string; deleted: true }> {
+    const normalizedId = this.normalizePostId(id);
+
+    await this.storageService.deletePost(normalizedId);
+
+    return { id: normalizedId, deleted: true };
+  }
+
   private normalizeName(value: unknown): string {
     if (value === undefined || value === null) {
       return DEFAULT_NAME;
@@ -72,6 +80,20 @@ export class FeedbackService {
       throw new BadRequestException(
         `message must be ${MAX_MESSAGE_LENGTH} characters or fewer`,
       );
+    }
+
+    return trimmed;
+  }
+
+  private normalizePostId(value: unknown): string {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new BadRequestException('id is required');
+    }
+
+    const trimmed = value.trim();
+
+    if (!/^[A-Za-z0-9._:-]+$/.test(trimmed)) {
+      throw new BadRequestException('id is invalid');
     }
 
     return trimmed;
