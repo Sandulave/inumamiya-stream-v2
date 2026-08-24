@@ -1,6 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { HighlightWorkerService } from './highlights/highlight-worker.service';
+import {
+  HighlightWorkerMode,
+  HighlightWorkerService,
+} from './highlights/highlight-worker.service';
 
 function parseMaxVods(argv: string[]): number | undefined {
   const flagIndex = argv.indexOf('--max-vods');
@@ -23,9 +26,7 @@ function parseDryRun(argv: string[]): boolean {
   return argv.includes('--dry-run');
 }
 
-function parseMode(
-  argv: string[],
-): 'server-incremental' | 'local-reanalyze-all' {
+function parseMode(argv: string[]): HighlightWorkerMode {
   const equalsArg = argv.find((arg) => arg.startsWith('--mode='));
   const modeIndex = argv.indexOf('--mode');
   const rawMode =
@@ -36,11 +37,21 @@ function parseMode(
     return 'server-incremental';
   }
 
+  if (
+    rawMode === 'analyze-missing-all' ||
+    rawMode === 'missing-all' ||
+    rawMode === 'local-analyze-missing-all'
+  ) {
+    return 'local-analyze-missing-all';
+  }
+
   if (rawMode === 'reanalyze-all' || rawMode === 'local-reanalyze-all') {
     return 'local-reanalyze-all';
   }
 
-  throw new Error('--mode must be server or reanalyze-all');
+  throw new Error(
+    '--mode must be server, analyze-missing-all, or reanalyze-all',
+  );
 }
 
 async function bootstrap() {

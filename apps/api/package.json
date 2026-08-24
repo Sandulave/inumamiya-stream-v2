@@ -13,6 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "highlight:worker": "ts-node -r tsconfig-paths/register src/highlight-worker.ts --mode=server",
+    "highlight:analyze-missing-all": "ts-node -r tsconfig-paths/register src/highlight-worker.ts --mode=analyze-missing-all",
     "highlight:reanalyze-all": "ts-node -r tsconfig-paths/register src/highlight-worker.ts --mode=reanalyze-all",
     "highlight:r2-upload": "ts-node -r tsconfig-paths/register src/highlight-r2-upload.ts",
     "highlight:enrich": "ts-node -r tsconfig-paths/register src/highlight-enrich.ts",

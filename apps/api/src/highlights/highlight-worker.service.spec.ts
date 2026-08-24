@@ -470,6 +470,41 @@ describe('HighlightWorkerService', () => {
     expect(summary.succeeded).toBe(37);
   });
 
+  it('local analyze-missing-all targets every unanalyzed archive and skips analyzed archives', async () => {
+    const paths = await createTempPaths();
+    const { service, twitchService } = createService({
+      HIGHLIGHT_WORKER_TEMP_DIR: paths.tempRoot,
+    });
+    useTempPaths(service, paths);
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    await writeFile(
+      join(paths.analyzerOutputDir, 'vod-2.json'),
+      JSON.stringify({ vodId: 'vod-2', momentCandidates: [] }),
+    );
+    twitchService.getAllArchiveVideosByLogin.mockResolvedValue([
+      createVideo({ id: 'vod-1', createdAt: '2026-08-15T00:00:00Z' }),
+      createVideo({ id: 'vod-2', createdAt: '2026-08-14T00:00:00Z' }),
+      createVideo({ id: 'vod-3', createdAt: '2026-08-13T00:00:00Z' }),
+    ]);
+    twitchService.getStreamByLogin.mockResolvedValue(null);
+    const processed: string[] = [];
+    jest.spyOn(service, 'processVod').mockImplementation((video) => {
+      processed.push(video.id);
+      return Promise.resolve({});
+    });
+
+    const summary = await service.run({ mode: 'local-analyze-missing-all' });
+
+    expect(processed).toEqual(['vod-1', 'vod-3']);
+    expect(summary).toMatchObject({
+      mode: 'local-analyze-missing-all',
+      twitchArchives: 3,
+      alreadyAnalyzed: 1,
+      target: 2,
+      succeeded: 2,
+    });
+  });
+
   it('server dry-run computes the next target without processing VODs', async () => {
     const paths = await createTempPaths();
     const { service, twitchService } = createService({

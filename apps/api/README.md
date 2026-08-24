@@ -96,6 +96,7 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
 # Highlight Worker
 
 Twitch VODの見どころ解析は、サーバー定期WorkerとローカルPC用の全件再解析でコマンドを分けています。
@@ -105,6 +106,8 @@ Twitch VODの見どころ解析は、サーバー定期WorkerとローカルPC�
 ```powershell
 pnpm --filter api highlight:worker
 pnpm --filter api highlight:worker -- --dry-run
+pnpm --filter api highlight:analyze-missing-all
+pnpm --filter api highlight:analyze-missing-all -- --dry-run
 ```
 
 本番サーバーの定期実行用です。毎回Twitch上に現在存在するarchiveを全ページ取得し、obsolete JSONを同期したうえで、最新の未解析VODを最大1件だけ解析して終了します。
@@ -131,6 +134,8 @@ build後に実行する場合:
 pnpm --filter api build
 pnpm --filter api highlight:worker:prod
 ```
+
+未解析のarchiveをすべて処理したい場合は `highlight:analyze-missing-all` を使います。解析済みの `tools/highlight-analyzer/output/<vodId>.json` はskipし、未解析VODだけをcreatedAtの新しい順に1本ずつ逐次処理します。
 
 ## Local PC
 

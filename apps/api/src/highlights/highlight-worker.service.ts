@@ -27,15 +27,18 @@ const WORKER_LOGIN = 'inumamiya';
 const DEFAULT_LOCK_MAX_AGE_HOURS = 12;
 const MAX_TIMELINE_POINTS = 1800;
 
+export type HighlightWorkerMode =
+  'server-incremental' | 'local-analyze-missing-all' | 'local-reanalyze-all';
+
 type WorkerOptions = {
   maxVods?: number;
   dryRun?: boolean;
-  mode?: 'server-incremental' | 'local-reanalyze-all';
+  mode?: HighlightWorkerMode;
   reanalyzeAll?: boolean;
 };
 
 export type HighlightWorkerSummary = {
-  mode: 'server-incremental' | 'local-reanalyze-all';
+  mode: HighlightWorkerMode;
   twitchArchives: number;
   alreadyAnalyzed: number;
   target: number;
@@ -123,7 +126,9 @@ export class HighlightWorkerService {
   ): Promise<HighlightWorkerSummary> {
     const mode = this.resolveMode(options);
     const isLocalReanalyzeAll = mode === 'local-reanalyze-all';
-    const maxVods = isLocalReanalyzeAll ? options.maxVods : 1;
+    const isLocalAnalyzeMissingAll = mode === 'local-analyze-missing-all';
+    const maxVods =
+      isLocalReanalyzeAll || isLocalAnalyzeMissingAll ? options.maxVods : 1;
 
     console.log('[Highlight Worker]');
     console.log(`Mode: ${mode}`);
@@ -1080,9 +1085,7 @@ export class HighlightWorkerService {
     }
   }
 
-  private resolveMode(
-    options: WorkerOptions,
-  ): 'server-incremental' | 'local-reanalyze-all' {
+  private resolveMode(options: WorkerOptions): HighlightWorkerMode {
     if (options.mode) {
       return options.mode;
     }
