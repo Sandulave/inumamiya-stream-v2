@@ -36,7 +36,6 @@ const sortOptions: { value: HighlightSort; label: string }[] = [
 ];
 
 const starFilterOptions = [0, 1, 2, 3, 4, 5];
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 function Stars({ value, label }: { value: number; label: string }) {
   const safeValue = Math.min(Math.max(Math.floor(value), 0), 5);
 
@@ -99,7 +98,7 @@ function resolveThumbnailUrl(thumbnailUrl: string) {
     return thumbnailUrl;
   }
 
-  return new URL(thumbnailUrl, API_BASE_URL).toString();
+  return thumbnailUrl;
 }
 
 function buildAreaPath(
