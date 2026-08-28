@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "pnpm --parallel --filter web --filter api run dev"
+    "dev": "pnpm --parallel --filter web --filter api run dev",
+    "archive:analyze": "pnpm --filter api highlight:analyze-missing-all",
+    "archive:reanalyze": "pnpm --filter api highlight:reanalyze-all",
+    "archive:worker": "pnpm --filter api highlight:worker"
   },
   "keywords": [],
   "author": "",
