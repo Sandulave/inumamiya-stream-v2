@@ -160,7 +160,9 @@ function Get-VodMetadataMap {
   $metadataUrl = "$BaseUrl/api/twitch/videos/inumamiya?first=100&sort=latest"
 
   try {
-    $response = Invoke-RestMethod -Uri $metadataUrl -Method Get
+    # Windows PowerShell 5.1 misdecodes UTF-8 JSON when Content-Type omits charset.
+    $httpResponse = Invoke-WebRequest -Uri $metadataUrl -Method Get -UseBasicParsing
+    $response = [System.Text.Encoding]::UTF8.GetString($httpResponse.RawContentStream.ToArray()) | ConvertFrom-Json
     foreach ($video in @($response.videos)) {
       if ($null -ne $video.id) {
         $metadataById[[string]$video.id] = $video
