@@ -34,11 +34,16 @@ Set these server environment variables before deployment:
 | `ANALYTICS_SESSION_SECRET` | Do not set | Random secret, at least 32 characters |
 | `ANALYTICS_DB_PATH` | Absolute path on a persistent disk, e.g. `/var/data/analytics.sqlite` | Do not set |
 | `ANALYTICS_API_URL` | Do not set | Optional API origin; defaults to `NEXT_PUBLIC_API_URL` |
+| `ANALYTICS_SITE_ORIGIN` | Do not set | Public site origin, e.g. `https://stream.g1keibabattle.com`; required behind an HTTPS reverse proxy |
 
 Never prefix these secrets with `NEXT_PUBLIC_`. Without the credentials, the
 dashboard stays locked and collection is disabled. Use HTTPS in production.
 The web host must overwrite `x-forwarded-for` at its trusted proxy boundary;
 the API uses a keyed, daily-changing digest for rate limiting, not raw IPs.
+For a directly exposed nginx proxy, use `proxy_set_header X-Forwarded-For $remote_addr`
+so a client-supplied header cannot change the rate-limit identity.
+Set `ANALYTICS_SITE_ORIGIN` to the browser-facing origin so login, logout, and
+collection requests use the public HTTPS URL for origin checks and redirects.
 
 Analytics uses a private SQLite database on the API server, not the public R2
 bucket used for highlight assets. Mount a persistent disk before using it in

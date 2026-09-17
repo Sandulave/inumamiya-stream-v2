@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import {
-  ADMIN_SESSION_SECONDS, analyticsApi, analyticsClientKey, analyticsConfigured,
+  ADMIN_SESSION_SECONDS, analyticsApi, analyticsClientKey, analyticsConfigured, analyticsOrigin,
   getAnalyticsSession, isSameOrigin,
 } from '@/lib/analytics-server';
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return new Response(null, { status: 403 });
-  const destination = new URL('/admin/analytics', request.url);
+  const destination = new URL('/admin/analytics', analyticsOrigin(request));
   const failure = (code: string) => {
     destination.searchParams.set('error', code);
     return NextResponse.redirect(destination, 303);

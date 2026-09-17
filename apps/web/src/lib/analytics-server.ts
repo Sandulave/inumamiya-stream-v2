@@ -37,8 +37,18 @@ export function analyticsClientKey(request: Request) {
     .digest('hex');
 }
 
+export function analyticsOrigin(request: Request) {
+  // A reverse proxy can expose HTTPS while Next.js sees an internal HTTP URL.
+  // Use an explicit public origin rather than trusting forwarded host headers.
+  const url = new URL(process.env.ANALYTICS_SITE_ORIGIN || request.url);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('ANALYTICS_SITE_ORIGIN must be an HTTP or HTTPS origin');
+  }
+  return url.origin;
+}
+
 export function isSameOrigin(request: Request) {
-  return request.headers.get('origin') === new URL(request.url).origin;
+  return request.headers.get('origin') === analyticsOrigin(request);
 }
 
 export function analyticsApi(path: string, init: RequestInit = {}) {
