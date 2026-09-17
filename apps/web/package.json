@@ -2,6 +2,7 @@
   "name": "web",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,6 +10,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "iron-session": "^9.0.1",
+    "lucide-react": "^1.46.0",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
