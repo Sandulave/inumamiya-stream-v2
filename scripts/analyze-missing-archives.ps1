@@ -270,6 +270,69 @@ function New-ArchiveAnnouncementEmbed {
   return $embed
 }
 
+function Wait-DiscordRateLimit {
+  param(
+    [string]$Seconds
+  )
+
+  $delaySeconds = 0.0
+  $validDelay = [double]::TryParse(
+    $Seconds,
+    [System.Globalization.NumberStyles]::Float,
+    [System.Globalization.CultureInfo]::InvariantCulture,
+    [ref]$delaySeconds
+  )
+  if (-not $validDelay -or $delaySeconds -lt 0 -or [double]::IsNaN($delaySeconds) -or [double]::IsInfinity($delaySeconds)) {
+    $delaySeconds = 1.0
+  }
+
+  # Round up and leave a small margin so the next request is past the reset time.
+  $remainingMilliseconds = [Math]::Ceiling($delaySeconds * 1000) + 100
+  while ($remainingMilliseconds -gt 0) {
+    $milliseconds = [int][Math]::Min(60000, $remainingMilliseconds)
+    Start-Sleep -Milliseconds $milliseconds
+    $remainingMilliseconds -= $milliseconds
+  }
+}
+
+function Send-DiscordArchivePayload {
+  param(
+    [string]$WebhookUrl,
+    [string]$Payload
+  )
+
+  $body = [System.Text.Encoding]::UTF8.GetBytes($Payload)
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try {
+      return Invoke-WebRequest `
+        -Uri $WebhookUrl `
+        -Method Post `
+        -UseBasicParsing `
+        -ContentType "application/json; charset=utf-8" `
+        -Body $body `
+        -ErrorAction Stop
+    } catch {
+      $response = $_.Exception.Response
+      if ($null -eq $response -or [int]$response.StatusCode -ne 429 -or $attempt -eq 3) {
+        throw
+      }
+
+      $retryAfter = $response.Headers['Retry-After']
+      if ([string]::IsNullOrWhiteSpace($retryAfter)) {
+        try {
+          $rateLimit = $_.ErrorDetails.Message | ConvertFrom-Json
+          $retryAfter = [string]$rateLimit.retry_after
+        } catch {
+          $retryAfter = $null
+        }
+      }
+
+      Write-Host "Discord rate limit reached. Waiting before retrying this archive."
+      Wait-DiscordRateLimit -Seconds $retryAfter
+    }
+  }
+}
+
 function Send-DiscordArchiveAnnouncement {
   param(
     [string]$WebhookUrl,
@@ -292,39 +355,47 @@ function Send-DiscordArchiveAnnouncement {
     # Keep Japanese copy editable while the launcher stays compatible with PowerShell 5.1.
     $copyPath = Join-Path $repoRoot "scripts\archive-announcement-copy.ja.json"
     $copy = Get-Content -LiteralPath $copyPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $catchphrase = $copy.catchphrases | Get-Random
+
+    # Confirm each post before moving on, preserving other webhook query parameters.
+    $webhookUri = [UriBuilder]::new($WebhookUrl)
+    $queryParts = @($webhookUri.Query.TrimStart('?').Split('&') |
+      Where-Object { $_ -and $_ -notmatch '^wait=' })
+    $webhookUri.Query = ($queryParts + @('wait=true')) -join '&'
+
     $metadataById = Get-VodMetadataMap -BaseUrl $BaseUrl
-    $maxEmbeds = 10
-    $embeds = @($Analyses |
-      Select-Object -First $maxEmbeds |
-      ForEach-Object {
-        New-ArchiveAnnouncementEmbed -Analysis $_ -BaseUrl $BaseUrl -MetadataById $metadataById -Copy $copy
-      })
-
-    # Keep the introduction inside the first card, including for batch announcements.
-    $embeds[0].description = $catchphrase
-    $content = ""
-
-    if ($Analyses.Count -gt $maxEmbeds) {
-      $content = $copy.moreArchives -f ($Analyses.Count - $maxEmbeds), $BaseUrl
-    }
-
-    $payload = @{
-      username = $Username
-      content = $content
-      embeds = $embeds
-      allowed_mentions = @{ parse = @() }
-    } | ConvertTo-Json -Depth 6
-
-    Invoke-RestMethod `
-      -Uri $WebhookUrl `
-      -Method Post `
-      -ContentType "application/json; charset=utf-8" `
-      -Body ([System.Text.Encoding]::UTF8.GetBytes($payload)) | Out-Null
-    Write-Host "Discord announcement sent."
   } catch {
-    Write-Host "Discord announcement failed: $($_.Exception.Message)"
+    Write-Host "Discord announcement setup failed: $($_.Exception.Message)"
+    return
   }
+
+  $sentCount = 0
+  foreach ($analysis in $Analyses) {
+    try {
+      $embed = New-ArchiveAnnouncementEmbed -Analysis $analysis -BaseUrl $BaseUrl -MetadataById $metadataById -Copy $copy
+      $embed.description = $copy.catchphrases | Get-Random
+      $payload = @{
+        username = $Username
+        embeds = @($embed)
+        allowed_mentions = @{ parse = @() }
+      } | ConvertTo-Json -Depth 6
+
+      $response = Send-DiscordArchivePayload -WebhookUrl $webhookUri.Uri.AbsoluteUri -Payload $payload
+      $sentCount++
+      Write-Host "Discord announcement sent for archive $($analysis.BaseName)."
+
+      if ($analysis -ne $Analyses[-1] -and $response.Headers['X-RateLimit-Remaining'] -eq '0') {
+        Wait-DiscordRateLimit -Seconds $response.Headers['X-RateLimit-Reset-After']
+      }
+    } catch {
+      Write-Host "Discord announcement failed for archive $($analysis.BaseName): $($_.Exception.Message)"
+      if ([int]$_.Exception.Response.StatusCode -in @(401, 403, 404, 429)) {
+        Write-Host "Stopping announcements because the webhook is unavailable or still rate limited."
+        break
+      }
+    }
+  }
+
+  Write-Host "Discord announcements complete: $sentCount/$($Analyses.Count) sent."
 }
 
 Import-LocalEnvironment -Paths @(
