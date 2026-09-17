@@ -127,7 +127,12 @@ function Format-ArchiveDurationMinutes {
   }
 
   $hours = [int][Math]::Floor($minutes / 60)
-  return $Copy.minutesWithHours -f $minutes, $hours, ($minutes % 60)
+  $remainingMinutes = $minutes % 60
+  if ($remainingMinutes -eq 0) {
+    return $Copy.hours -f $hours
+  }
+
+  return $Copy.hoursWithMinutes -f $hours, $remainingMinutes
 }
 
 function Format-ArchiveTimeRange {
@@ -137,15 +142,29 @@ function Format-ArchiveTimeRange {
     [object]$Copy
   )
 
-  if ([string]::IsNullOrWhiteSpace($PublishedAt) -or $DurationSeconds -le 0) {
+  if ([string]::IsNullOrWhiteSpace($PublishedAt)) {
     return $null
   }
 
   try {
     $startedAt = [DateTimeOffset]::Parse($PublishedAt).ToOffset([TimeSpan]::FromHours(9))
-    $endedAt = $startedAt.AddSeconds($DurationSeconds)
     $culture = [System.Globalization.CultureInfo]::GetCultureInfo("ja-JP")
-    return $Copy.timeRange -f $startedAt.ToString($Copy.dateFormat, $culture), $endedAt.ToString($Copy.dateFormat, $culture)
+    $dateTimeFormat = "$($Copy.dateFormat) $($Copy.timeFormat)"
+    if ($DurationSeconds -le 0) {
+      return $startedAt.ToString($dateTimeFormat, $culture)
+    }
+
+    $endedAt = $startedAt.AddSeconds($DurationSeconds)
+    if ($startedAt.Date -eq $endedAt.Date) {
+      return $Copy.timeRange -f `
+        $startedAt.ToString($Copy.dateFormat, $culture), `
+        $startedAt.ToString($Copy.timeFormat, $culture), `
+        $endedAt.ToString($Copy.timeFormat, $culture)
+    }
+
+    return $Copy.timeRangeAcrossDays -f `
+      $startedAt.ToString($dateTimeFormat, $culture), `
+      $endedAt.ToString($dateTimeFormat, $culture)
   } catch {
     return $null
   }
@@ -198,15 +217,15 @@ function New-ArchiveAnnouncementEmbed {
 
   $title = $Copy.archiveTitle
   if ($null -ne $metadata -and -not [string]::IsNullOrWhiteSpace($metadata.title)) {
-    $title = ([string]$metadata.title).Trim()
-    if ($title.Length -gt 200) {
-      $length = if ([char]::IsHighSurrogate($title[199])) { 199 } else { 200 }
-      $title = $title.Substring(0, $length) + "..."
+    $title = ([regex]::Replace([string]$metadata.title, '\s+', ' ')).Trim()
+    $titleInfo = [System.Globalization.StringInfo]::new($title)
+    if ($titleInfo.LengthInTextElements -gt 80) {
+      $title = $titleInfo.SubstringByTextElements(0, 79) + $Copy.ellipsis
     }
   }
 
   $range = $null
-  if ($null -ne $metadata -and $durationSeconds -gt 0) {
+  if ($null -ne $metadata) {
     $range = Format-ArchiveTimeRange -PublishedAt $metadata.published_at -DurationSeconds $durationSeconds -Copy $Copy
   }
 
@@ -215,23 +234,40 @@ function New-ArchiveAnnouncementEmbed {
     $duration = Format-ArchiveDurationMinutes -DurationSeconds $durationSeconds -Copy $Copy
   }
 
-  return @{
+  $embed = @{
+    author = @{ name = $Copy.heading }
     title = $title
     url = $url
-    color = 0x2AA198
+    color = 0x8B5CF6
     fields = @(
       @{
         name = $Copy.timeLabel
         value = if ([string]::IsNullOrWhiteSpace($range)) { $Copy.unknownTime } else { $range }
-        inline = $false
+        inline = $true
       },
       @{
         name = $Copy.durationLabel
         value = $duration
-        inline = $false
+        inline = $true
       }
     )
+    footer = @{ text = $Copy.footer }
   }
+
+  if ($null -ne $metadata -and -not [string]::IsNullOrWhiteSpace($metadata.thumbnail_url)) {
+    $thumbnailUrl = ([string]$metadata.thumbnail_url).
+      Replace('%{width}', '320').Replace('%{height}', '180').
+      Replace('{width}', '320').Replace('{height}', '180')
+    $thumbnailUri = $null
+    if (
+      [Uri]::TryCreate($thumbnailUrl, [UriKind]::Absolute, [ref]$thumbnailUri) -and
+      $thumbnailUri.Scheme -in @('http', 'https')
+    ) {
+      $embed.thumbnail = @{ url = $thumbnailUri.AbsoluteUri }
+    }
+  }
+
+  return $embed
 }
 
 function Send-DiscordArchiveAnnouncement {
@@ -265,14 +301,12 @@ function Send-DiscordArchiveAnnouncement {
         New-ArchiveAnnouncementEmbed -Analysis $_ -BaseUrl $BaseUrl -MetadataById $metadataById -Copy $copy
       })
 
-    $content = @(
-      "**$($copy.heading)**"
-      ""
-      "> $catchphrase"
-    ) -join "`n"
+    # Keep the introduction inside the first card, including for batch announcements.
+    $embeds[0].description = $catchphrase
+    $content = ""
 
     if ($Analyses.Count -gt $maxEmbeds) {
-      $content += "`n`n" + ($copy.moreArchives -f ($Analyses.Count - $maxEmbeds), $BaseUrl)
+      $content = $copy.moreArchives -f ($Analyses.Count - $maxEmbeds), $BaseUrl
     }
 
     $payload = @{
