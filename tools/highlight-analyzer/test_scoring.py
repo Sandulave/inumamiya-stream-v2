@@ -1,8 +1,10 @@
 import unittest
+from statistics import median
 
 from models import SampleMetrics
 from scoring import (
     AUDIO_MIN_LOUDNESS_DBFS,
+    clamp,
     compute_audio_scores,
     compute_highlight_scores,
     compute_observation_scores,
@@ -99,6 +101,24 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(samples[-1].audio_score, 0)
         self.assertEqual(samples[-1].observation_chat_score, 100)
 
+    def test_optimized_audio_baseline_matches_reference_calculation(self):
+        values = [-100.0, -50.0, -45.0, -20.0, -14.0, -60.0] * 24
+        samples = make_audio_samples(values)
+        expected = reference_audio_scores(make_audio_samples(values), 30)
+
+        compute_audio_scores(samples, baseline_window_seconds=30)
+
+        for sample, expected_values in zip(samples, expected):
+            self.assertEqual(
+                (
+                    sample.audio_delta,
+                    sample.audio_eligible,
+                    sample.audio_eligible_delta,
+                    sample.audio_spike_score,
+                ),
+                expected_values,
+            )
+
     def test_merge_peaks_keeps_best_candidate_in_window(self):
         samples = [
             SampleMetrics(timestamp_seconds=10, timestamp="00:00:10", highlight_score=80),
@@ -132,6 +152,30 @@ def make_audio_samples(audio_values: list[float]) -> list[SampleMetrics]:
         )
         for index, audio_db in enumerate(audio_values)
     ]
+
+
+def reference_audio_scores(
+    samples: list[SampleMetrics],
+    baseline_window_seconds: float,
+) -> list[tuple[float, bool, float, float]]:
+    results: list[tuple[float, bool, float, float]] = []
+    for index, sample in enumerate(samples):
+        baseline_values = [
+            previous.audio_db
+            for previous in samples[:index]
+            if previous.timestamp_seconds
+            >= sample.timestamp_seconds - baseline_window_seconds
+            and previous.audio_db > -99.0
+        ]
+        if not baseline_values:
+            results.append((0.0, False, 0.0, 0.0))
+            continue
+        delta = sample.audio_db - median(baseline_values)
+        positive_delta = max(0.0, delta)
+        eligible = sample.audio_db >= AUDIO_MIN_LOUDNESS_DBFS and positive_delta > 0.0
+        eligible_delta = positive_delta if eligible else 0.0
+        results.append((delta, eligible, eligible_delta, clamp(eligible_delta / 18.0 * 100.0)))
+    return results
 
 
 if __name__ == "__main__":

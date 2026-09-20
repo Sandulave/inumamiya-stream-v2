@@ -1,4 +1,6 @@
 from __future__ import annotations
+from bisect import bisect_left, bisect_right, insort
+from collections import deque
 from statistics import median
 
 from models import EnhancedHighlightEvent, EventHighlightEvent, HighlightEvent, MomentCandidate, SampleMetrics
@@ -54,25 +56,32 @@ def compute_audio_scores(samples: list[SampleMetrics], baseline_window_seconds: 
     for sample, score in zip(samples, level_scores):
         sample.audio_level_score = score
 
-    for idx, sample in enumerate(samples):
+    baseline_samples: deque[tuple[float, float]] = deque()
+    sorted_baseline_values: list[float] = []
+    for sample in samples:
         start_time = sample.timestamp_seconds - baseline_window_seconds
-        baseline_values = [
-            previous.audio_db
-            for previous in samples[:idx]
-            if previous.timestamp_seconds >= start_time and previous.audio_db > -99.0
-        ]
-        if not baseline_values:
+        while baseline_samples and baseline_samples[0][0] < start_time:
+            _, expired_value = baseline_samples.popleft()
+            del sorted_baseline_values[bisect_left(sorted_baseline_values, expired_value)]
+
+        if not sorted_baseline_values:
             sample.audio_delta = 0.0
             sample.audio_eligible = False
             sample.audio_eligible_delta = 0.0
             sample.audio_spike_score = 0.0
-            continue
-        baseline = median(baseline_values)
-        sample.audio_delta = sample.audio_db - baseline
-        positive_delta = max(0.0, sample.audio_delta)
-        sample.audio_eligible = sample.audio_db >= AUDIO_MIN_LOUDNESS_DBFS and positive_delta > 0.0
-        sample.audio_eligible_delta = positive_delta if sample.audio_eligible else 0.0
-        sample.audio_spike_score = clamp(sample.audio_eligible_delta / 18.0 * 100.0)
+        else:
+            baseline = median(sorted_baseline_values)
+            sample.audio_delta = sample.audio_db - baseline
+            positive_delta = max(0.0, sample.audio_delta)
+            sample.audio_eligible = (
+                sample.audio_db >= AUDIO_MIN_LOUDNESS_DBFS and positive_delta > 0.0
+            )
+            sample.audio_eligible_delta = positive_delta if sample.audio_eligible else 0.0
+            sample.audio_spike_score = clamp(sample.audio_eligible_delta / 18.0 * 100.0)
+
+        if sample.audio_db > -99.0:
+            baseline_samples.append((sample.timestamp_seconds, sample.audio_db))
+            insort(sorted_baseline_values, sample.audio_db)
 
 
 def compute_highlight_scores(samples: list[SampleMetrics], weights: dict[str, float]) -> None:
@@ -193,12 +202,18 @@ def compute_event_highlight_scores(
     spike_w = weights["audio_spike"] / total
     level_w = weights["audio_level"] / total
 
+    timestamps = [sample.timestamp_seconds for sample in samples]
+    chronological_timestamps = all(
+        previous <= current
+        for previous, current in zip(timestamps, timestamps[1:])
+    )
     for sample in samples:
         chat_peak = find_event_chat_peak(
             samples,
             sample.timestamp_seconds,
             chat_window_before_seconds,
             chat_window_after_seconds,
+            timestamps if chronological_timestamps else None,
         )
         sample.event_chat_score = chat_peak.chat_json_score
         sample.event_chat_peak_offset_seconds = chat_peak.timestamp_seconds - sample.timestamp_seconds
@@ -220,14 +235,20 @@ def find_event_chat_peak(
     timestamp_seconds: float,
     before_seconds: float,
     after_seconds: float,
+    timestamps: list[float] | None = None,
 ) -> SampleMetrics:
     window_start = timestamp_seconds - before_seconds
     window_end = timestamp_seconds + after_seconds
-    candidates = [
-        sample
-        for sample in samples
-        if window_start <= sample.timestamp_seconds <= window_end
-    ]
+    if timestamps is None:
+        candidates = [
+            sample
+            for sample in samples
+            if window_start <= sample.timestamp_seconds <= window_end
+        ]
+    else:
+        first = bisect_left(timestamps, window_start)
+        after_last = bisect_right(timestamps, window_end)
+        candidates = samples[first:after_last]
     if not candidates:
         return min(samples, key=lambda sample: abs(sample.timestamp_seconds - timestamp_seconds))
     return max(
