@@ -26,6 +26,10 @@ import { HighlightChaptersService } from './highlight-chapters.service';
 const WORKER_LOGIN = 'inumamiya';
 const DEFAULT_LOCK_MAX_AGE_HOURS = 12;
 const MAX_TIMELINE_POINTS = 1800;
+// Twitch's archive duration and the media container can differ slightly.
+const DURATION_TOLERANCE_SECONDS = 60;
+
+class IncompleteAnalysisError extends Error {}
 
 export type HighlightWorkerMode =
   'server-incremental' | 'local-analyze-missing-all' | 'local-reanalyze-all';
@@ -183,6 +187,7 @@ export class HighlightWorkerService {
       const isComplete = await this.isAnalysisComplete(
         video.id,
         paths.analyzerOutputDir,
+        parseTwitchDuration(video.duration),
       );
 
       if (isComplete) {
@@ -269,6 +274,8 @@ export class HighlightWorkerService {
     const vodTempDir = join(paths.tempRoot, video.id);
     const videoPath = join(vodTempDir, 'video.mp4');
     const chatPath = join(vodTempDir, 'chat.json');
+    const downloadsPath = join(vodTempDir, 'downloads.json');
+    const expectedDurationSeconds = parseTwitchDuration(video.duration);
 
     await mkdir(vodTempDir, { recursive: true });
     console.log('');
@@ -278,22 +285,41 @@ export class HighlightWorkerService {
     console.log('[Highlight Worker] 未解析VODを検出しました。');
 
     try {
-      if (await this.hasNonEmptyFile(videoPath)) {
-        console.log('[Highlight Worker] [1/4] 既存のVOD動画を再利用します。');
+      const downloads = await this.readJsonIfValid(downloadsPath);
+      const canReuseDownloads =
+        downloads?.vodId === video.id &&
+        expectedDurationSeconds !== undefined &&
+        downloads.durationSeconds === expectedDurationSeconds &&
+        (await this.hasNonEmptyFile(videoPath)) &&
+        (await this.hasValidJsonFile(chatPath));
+
+      if (canReuseDownloads) {
+        console.log('[Highlight Worker] [1/4] 取得完了を確認済みのVOD動画とChatを再利用します。');
       } else {
+        // A nonempty MP4 or valid JSON alone may be a partial download. Invalidate
+        // the pair together, including downloads from when the VOD was shorter.
+        await this.clearDownloads(downloadsPath, videoPath, chatPath);
         console.log('[Highlight Worker] [1/4] VODをダウンロードしています...');
         await this.downloadVideo(video.id, videoPath);
-      }
-
-      if (await this.hasValidJsonFile(chatPath)) {
-        console.log('[Highlight Worker] [2/4] 既存のChat JSONを再利用します。');
-      } else {
         console.log('[Highlight Worker] [2/4] Chatをダウンロードしています...');
         await this.downloadChat(video.id, chatPath);
+        await writeFile(
+          downloadsPath,
+          JSON.stringify({ vodId: video.id, durationSeconds: expectedDurationSeconds }),
+        );
       }
 
       console.log('[Highlight Worker] [3/4] 解析しています...');
-      await this.runAnalyzer(video.id, videoPath, chatPath, paths.analyzerDir);
+      try {
+        await this.runAnalyzer(video.id, videoPath, chatPath, paths.analyzerDir);
+      } catch (error) {
+        // Decode errors can reveal a corrupt download even after the downloader
+        // exited successfully. Keep diagnostics, but force a fresh pair next run.
+        await unlink(downloadsPath).catch((unlinkError: unknown) => {
+          if (!isNodeError(unlinkError) || unlinkError.code !== 'ENOENT') throw unlinkError;
+        });
+        throw error;
+      }
 
       console.log('[Highlight Worker] [4/6] timelineを生成しています...');
       console.log('[Highlight Worker] [5/6] サムネイルを生成しています...');
@@ -308,6 +334,7 @@ export class HighlightWorkerService {
             analysis,
             paths.analyzerOutputDir,
           ),
+        expectedDurationSeconds,
       );
 
       try {
@@ -323,6 +350,11 @@ export class HighlightWorkerService {
       console.log('[Highlight Worker] 一時ファイルを削除しました。');
       return {};
     } catch (error) {
+      if (error instanceof IncompleteAnalysisError) {
+        await this.clearDownloads(downloadsPath, videoPath, chatPath);
+        console.error('[Highlight Worker] 全編に満たない動画とChatを破棄しました。次回は再取得します。');
+        throw error;
+      }
       console.error(
         '[Highlight Worker] 解析に失敗したため一時ファイルを残しました。',
       );
@@ -333,14 +365,36 @@ export class HighlightWorkerService {
   async isAnalysisComplete(
     vodId: string,
     analyzerOutputDir = this.resolvePaths().analyzerOutputDir,
+    expectedDurationSeconds?: number,
   ): Promise<boolean> {
-    return this.storageService.hasAnalysis(vodId, analyzerOutputDir);
+    if (expectedDurationSeconds === undefined) {
+      return this.storageService.hasAnalysis(vodId, analyzerOutputDir);
+    }
+
+    let analysis: AnalysisJson | null;
+    try {
+      analysis = await this.storageService.getAnalysis(vodId, analyzerOutputDir);
+    } catch (error) {
+      if (this.storageService.isR2Enabled()) throw error;
+      return false;
+    }
+    if (!analysis) return false;
+
+    if (!coversArchiveDuration(analysis, expectedDurationSeconds)) {
+      console.warn(
+        `[Highlight Worker] 解析時間が不足しているため再解析します: ${vodId} ` +
+          `(analysis=${String(analysis.durationSeconds)}s, archive=${expectedDurationSeconds}s)`,
+      );
+      return false;
+    }
+    return true;
   }
 
   async finalizeAnalysisResult(
     vodId: string,
     analyzerOutputDir = this.resolvePaths().analyzerOutputDir,
     beforeSave?: BeforeSaveAnalysis,
+    expectedDurationSeconds?: number,
   ): Promise<string> {
     const highlightsPath = join(analyzerOutputDir, 'highlights.json');
     const parsed = await this.readJsonIfValid(highlightsPath);
@@ -363,7 +417,17 @@ export class HighlightWorkerService {
       );
     }
 
-      parsed.visualizationTimeline = await this.buildVisualizationTimeline(
+    if (
+      expectedDurationSeconds !== undefined &&
+      !coversArchiveDuration(parsed, expectedDurationSeconds)
+    ) {
+      throw new IncompleteAnalysisError(
+        `[finalize] 解析時間がアーカイブ全編に達していません: ${vodId} ` +
+          `(analysis=${String(parsed.durationSeconds)}s, archive=${expectedDurationSeconds}s)`,
+      );
+    }
+
+    parsed.visualizationTimeline = await this.buildVisualizationTimeline(
       analyzerOutputDir,
       parsed,
     );
@@ -385,6 +449,14 @@ export class HighlightWorkerService {
     }
 
     return finalPath;
+  }
+
+  private async clearDownloads(...filePaths: string[]): Promise<void> {
+    for (const filePath of filePaths) {
+      await unlink(filePath).catch((error: unknown) => {
+        if (!isNodeError(error) || error.code !== 'ENOENT') throw error;
+      });
+    }
   }
 
   async syncObsoleteAnalysisJson(
@@ -1187,6 +1259,28 @@ export class HighlightWorkerService {
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === 'object' && error !== null && 'code' in error;
+}
+
+function parseTwitchDuration(duration: string): number | undefined {
+  const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(duration);
+  if (!match || !duration) return undefined;
+  const seconds = Number(match[1] ?? 0) * 3600 +
+    Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
+function coversArchiveDuration(
+  analysis: AnalysisJson,
+  expectedDurationSeconds: number,
+): boolean {
+  const durations = [analysis.durationSeconds ?? analysis.visualizationTimeline?.durationSeconds];
+  if (analysis.visualizationTimeline) {
+    durations.push(analysis.visualizationTimeline.durationSeconds);
+  }
+  return durations.every((duration) =>
+    typeof duration === 'number' && Number.isFinite(duration) && duration > 0 &&
+    duration >= expectedDurationSeconds - DURATION_TOLERANCE_SECONDS,
+  );
 }
 
 function formatErrorReason(error: unknown): string {

@@ -279,6 +279,16 @@ def analyze_video(input_path: Path, config: AnalyzerConfig, video_info: dict[str
     finally:
         capture.release()
 
+    covered_until = samples[-1].timestamp_seconds + interval if samples else 0.0
+    # A final seek can miss the last frame due to duration rounding. Larger
+    # gaps must fail instead of publishing truncated chat/audio as complete.
+    tail_tolerance = max(1.0, interval)
+    if not samples or duration - covered_until > tail_tolerance:
+        raise UserFacingError(
+            f"動画の解析が途中で停止しました: 解析済み {format_timestamp(covered_until)} / "
+            f"動画長 {format_timestamp(duration)}。動画を再取得して再実行してください。"
+        )
+
     chat_scores = normalize_to_100(raw_motion)
     for sample, score in zip(samples, chat_scores):
         sample.chat_score = score

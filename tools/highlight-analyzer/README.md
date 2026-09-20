@@ -170,6 +170,8 @@ Moment Candidates
 
 ## 簡単な動作確認
 
+動画の読み取りが途中で止まり、末尾に1サンプル間隔（最小1秒）を超える未解析区間が残る場合はエラーにします。短い解析結果を全編の結果として保存しないため、動画を再取得して再実行してください。入力動画自体が短い場合の検出は、Twitchの動画長と照合するワーカー側で行います。
+
 ```powershell
 python analyze.py --help
 python analyze.py --input "C:\videos\not-found.mp4"
@@ -179,4 +181,5 @@ python -m unittest test_event_scoring.py
 python -m unittest test_moment_candidates.py
 python -m unittest test_output_contract.py
 python -m unittest test_score_normalization.py
+python -m unittest test_video_coverage.py
 ```

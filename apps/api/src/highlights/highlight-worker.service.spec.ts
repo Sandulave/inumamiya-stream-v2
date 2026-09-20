@@ -128,6 +128,101 @@ describe('HighlightWorkerService', () => {
     ).resolves.toBe(false);
   });
 
+  it.each([
+    { durationSeconds: 2149, complete: false },
+    { durationSeconds: 44457, complete: true },
+    { durationSeconds: 44397, complete: true },
+    { durationSeconds: 44396, complete: false },
+    { durationSeconds: undefined, complete: false },
+    { durationSeconds: 0, complete: false },
+    { durationSeconds: '44457', complete: false },
+    { durationSeconds: 44457, timelineDuration: 2149, complete: false },
+    { durationSeconds: 2149, timelineDuration: 44457, complete: false },
+    { durationSeconds: undefined, timelineDuration: 44457, complete: true },
+  ])(
+    'checks archive coverage for $durationSeconds seconds and timeline $timelineDuration',
+    async ({ durationSeconds, timelineDuration, complete }) => {
+      const paths = await createTempPaths();
+      const { service } = createService();
+      await mkdir(paths.analyzerOutputDir, { recursive: true });
+      await writeFile(
+        join(paths.analyzerOutputDir, '2845096588.json'),
+        JSON.stringify({
+          vodId: '2845096588',
+          durationSeconds,
+          momentCandidates: [],
+          ...(timelineDuration === undefined
+            ? {}
+            : {
+                visualizationTimeline: {
+                  durationSeconds: timelineDuration,
+                  points: [],
+                },
+              }),
+        }),
+      );
+
+      await expect(
+        service.isAnalysisComplete(
+          '2845096588',
+          paths.analyzerOutputDir,
+          44457,
+        ),
+      ).resolves.toBe(complete);
+    },
+  );
+
+  it.each(['local', 'R2'])(
+    'retries a 35:49 analysis from %s for a 12:20:57 archive',
+    async (storage) => {
+      const paths = await createTempPaths();
+      const { service, storageService, twitchService } = createService(
+        storage === 'R2'
+          ? {
+              R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+              R2_ACCESS_KEY_ID: 'test-access-key',
+              R2_SECRET_ACCESS_KEY: 'test-secret-key',
+              R2_BUCKET: 'test-bucket',
+            }
+          : {},
+      );
+      useTempPaths(service, paths);
+      const raw = JSON.stringify({
+        vodId: '2878482828',
+        durationSeconds: 2149,
+        momentCandidates: [],
+        visualizationTimeline: { durationSeconds: 2149, points: [] },
+      });
+      if (storage === 'R2') {
+        const send = jest.fn().mockResolvedValue({
+          Body: { transformToString: () => Promise.resolve(raw) },
+        });
+        (
+          storageService as unknown as { s3Client: { send: jest.Mock } }
+        ).s3Client = { send };
+        jest.spyOn(storageService, 'listAnalysisRefs').mockResolvedValue([]);
+      } else {
+        await mkdir(paths.analyzerOutputDir, { recursive: true });
+        await writeFile(join(paths.analyzerOutputDir, '2878482828.json'), raw);
+      }
+      const video = createVideo({ id: '2878482828', duration: '12h20m57s' });
+      twitchService.getAllArchiveVideosByLogin.mockResolvedValue([video]);
+      twitchService.getStreamByLogin.mockResolvedValue(null);
+      const processVod = jest
+        .spyOn(service, 'processVod')
+        .mockResolvedValue({});
+
+      const summary = await service.run();
+
+      expect(processVod).toHaveBeenCalledWith(video, paths);
+      expect(summary).toMatchObject({
+        alreadyAnalyzed: 0,
+        target: 1,
+        succeeded: 1,
+      });
+    },
+  );
+
   it('runs video download, chat download, analyzer, and finalize for an unanalyzed VOD', async () => {
     const paths = await createTempPaths();
     const { service } = createService();
@@ -155,7 +250,7 @@ describe('HighlightWorkerService', () => {
     expect(calls).toEqual(['video', 'chat', 'analyzer', 'finalize']);
   });
 
-  it('reuses existing video and valid chat temp files', async () => {
+  it('reuses completed downloads for the same archive duration', async () => {
     const paths = await createTempPaths();
     const { service } = createService();
     const vodTempDir = join(paths.tempRoot, '2845096588');
@@ -165,6 +260,10 @@ describe('HighlightWorkerService', () => {
     await writeFile(
       join(vodTempDir, 'chat.json'),
       JSON.stringify({ comments: [] }),
+    );
+    await writeFile(
+      join(vodTempDir, 'downloads.json'),
+      JSON.stringify({ vodId: '2845096588', durationSeconds: 18780 }),
     );
 
     const videoDownload = jest
@@ -182,6 +281,151 @@ describe('HighlightWorkerService', () => {
 
     expect(videoDownload).not.toHaveBeenCalled();
     expect(chatDownload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: 'unmarked partial downloads', marker: undefined },
+    {
+      name: 'downloads from a shorter live archive',
+      marker: { vodId: '2845096588', durationSeconds: 2149 },
+    },
+    {
+      name: 'downloads from another archive',
+      marker: { vodId: '999', durationSeconds: 18780 },
+    },
+  ])('redownloads both files for $name', async ({ marker }) => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const vodTempDir = join(paths.tempRoot, '2845096588');
+    const videoPath = join(vodTempDir, 'video.mp4');
+    const chatPath = join(vodTempDir, 'chat.json');
+    await mkdir(vodTempDir, { recursive: true });
+    await writeFile(videoPath, 'partial video');
+    await writeFile(chatPath, JSON.stringify({ comments: [] }));
+    if (marker) {
+      await writeFile(
+        join(vodTempDir, 'downloads.json'),
+        JSON.stringify(marker),
+      );
+    }
+    const videoDownload = jest
+      .spyOn(service as any, 'downloadVideo')
+      .mockImplementation(async () => {
+        await expect(stat(videoPath)).rejects.toThrow();
+        await expect(stat(chatPath)).rejects.toThrow();
+        await writeFile(videoPath, 'complete video');
+      });
+    const chatDownload = jest
+      .spyOn(service as any, 'downloadChat')
+      .mockImplementation(async () => {
+        await writeFile(chatPath, JSON.stringify({ comments: [] }));
+      });
+    jest.spyOn(service as any, 'runAnalyzer').mockImplementation(async () => {
+      expect(
+        JSON.parse(await readFile(join(vodTempDir, 'downloads.json'), 'utf8')),
+      ).toMatchObject({
+        vodId: '2845096588',
+        durationSeconds: 18780,
+      });
+    });
+    jest
+      .spyOn(service, 'finalizeAnalysisResult')
+      .mockResolvedValue('result.json');
+
+    await service.processVod(createVideo(), paths);
+
+    expect(videoDownload).toHaveBeenCalledTimes(1);
+    expect(chatDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reuse files left by an interrupted chat download', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const vodTempDir = join(paths.tempRoot, '2845096588');
+    const videoDownload = jest
+      .spyOn(service as any, 'downloadVideo')
+      .mockImplementation(async () => {
+        await writeFile(join(vodTempDir, 'video.mp4'), 'video');
+      });
+    const chatDownload = jest
+      .spyOn(service as any, 'downloadChat')
+      .mockImplementation(async () => {
+        await writeFile(
+          join(vodTempDir, 'chat.json'),
+          JSON.stringify({ comments: [] }),
+        );
+        throw new Error('chat download interrupted');
+      });
+    const analyzer = jest
+      .spyOn(service as any, 'runAnalyzer')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(service, 'finalizeAnalysisResult')
+      .mockResolvedValue('result.json');
+
+    await expect(service.processVod(createVideo(), paths)).rejects.toThrow(
+      'chat download interrupted',
+    );
+    await expect(stat(join(vodTempDir, 'downloads.json'))).rejects.toThrow();
+    expect(analyzer).not.toHaveBeenCalled();
+
+    chatDownload.mockImplementation(async () => {
+      await writeFile(
+        join(vodTempDir, 'chat.json'),
+        JSON.stringify({ comments: [] }),
+      );
+    });
+    await service.processVod(createVideo(), paths);
+
+    expect(videoDownload).toHaveBeenCalledTimes(2);
+    expect(chatDownload).toHaveBeenCalledTimes(2);
+    expect(analyzer).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates the completed download marker when analysis fails', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const vodTempDir = join(paths.tempRoot, '2845096588');
+    const videoPath = join(vodTempDir, 'video.mp4');
+    const chatPath = join(vodTempDir, 'chat.json');
+    const downloadsPath = join(vodTempDir, 'downloads.json');
+    await mkdir(vodTempDir, { recursive: true });
+    await writeFile(videoPath, 'complete video');
+    await writeFile(chatPath, JSON.stringify({ comments: [] }));
+    await writeFile(
+      downloadsPath,
+      JSON.stringify({ vodId: '2845096588', durationSeconds: 18780 }),
+    );
+
+    const videoDownload = jest
+      .spyOn(service as any, 'downloadVideo')
+      .mockImplementation(async () => {
+        await writeFile(videoPath, 'redownloaded video');
+      });
+    const chatDownload = jest
+      .spyOn(service as any, 'downloadChat')
+      .mockImplementation(async () => {
+        await writeFile(chatPath, JSON.stringify({ comments: [] }));
+      });
+    const analyzer = jest
+      .spyOn(service as any, 'runAnalyzer')
+      .mockRejectedValueOnce(new Error('decoder stopped'));
+    jest
+      .spyOn(service, 'finalizeAnalysisResult')
+      .mockResolvedValue('result.json');
+
+    await expect(service.processVod(createVideo(), paths)).rejects.toThrow(
+      'decoder stopped',
+    );
+    await expect(stat(downloadsPath)).rejects.toThrow();
+    await expect(stat(videoPath)).resolves.toBeDefined();
+    await expect(stat(chatPath)).resolves.toBeDefined();
+
+    analyzer.mockResolvedValue(undefined);
+    await service.processVod(createVideo(), paths);
+
+    expect(videoDownload).toHaveBeenCalledTimes(1);
+    expect(chatDownload).toHaveBeenCalledTimes(1);
   });
 
   it('finalizes analyzer output only when vodId matches', async () => {
@@ -210,6 +454,118 @@ describe('HighlightWorkerService', () => {
     await expect(
       service.finalizeAnalysisResult('2845096588', paths.analyzerOutputDir),
     ).rejects.toThrow('vodIdが一致しません');
+  });
+
+  it.each([2149, undefined])(
+    'rejects incomplete output (%s seconds) before thumbnails or publication',
+    async (durationSeconds) => {
+      const paths = await createTempPaths();
+      const { service, storageService, chaptersService } = createService({
+        R2_ENDPOINT: 'https://example.r2.cloudflarestorage.com',
+        R2_ACCESS_KEY_ID: 'test-access-key',
+        R2_SECRET_ACCESS_KEY: 'test-secret-key',
+        R2_BUCKET: 'test-bucket',
+      });
+      const send = jest.fn().mockResolvedValue({});
+      (
+        storageService as unknown as { s3Client: { send: jest.Mock } }
+      ).s3Client = { send };
+      const finalPath = join(paths.analyzerOutputDir, '2845096588.json');
+      const previous = JSON.stringify({
+        vodId: '2845096588',
+        durationSeconds: 44457,
+        momentCandidates: [],
+      });
+      await mkdir(paths.analyzerOutputDir, { recursive: true });
+      await writeFile(finalPath, previous);
+      await writeFile(
+        join(paths.analyzerOutputDir, 'highlights.json'),
+        JSON.stringify({
+          vodId: '2845096588',
+          durationSeconds,
+          momentCandidates: [],
+        }),
+      );
+      const thumbnails = jest.fn().mockResolvedValue(undefined);
+
+      await expect(
+        service.finalizeAnalysisResult(
+          '2845096588',
+          paths.analyzerOutputDir,
+          thumbnails,
+          44457,
+        ),
+      ).rejects.toThrow();
+
+      expect(thumbnails).not.toHaveBeenCalled();
+      expect(chaptersService.getChapters).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      await expect(readFile(finalPath, 'utf8')).resolves.toBe(previous);
+    },
+  );
+
+  it('discards truncated downloads after coverage validation fails and redownloads on retry', async () => {
+    const paths = await createTempPaths();
+    const { service } = createService();
+    const video = createVideo({ duration: '12h20m57s' });
+    const vodTempDir = join(paths.tempRoot, video.id);
+    await mkdir(paths.analyzerOutputDir, { recursive: true });
+    const videoDownload = jest
+      .spyOn(service as any, 'downloadVideo')
+      .mockImplementation(async () => {
+        await writeFile(join(vodTempDir, 'video.mp4'), 'video');
+      });
+    const chatDownload = jest
+      .spyOn(service as any, 'downloadChat')
+      .mockImplementation(async () => {
+        await writeFile(
+          join(vodTempDir, 'chat.json'),
+          JSON.stringify({ comments: [] }),
+        );
+      });
+    const analyzer = jest
+      .spyOn(service as any, 'runAnalyzer')
+      .mockImplementation(async () => {
+        await writeFile(
+          join(paths.analyzerOutputDir, 'highlights.json'),
+          JSON.stringify({
+            vodId: video.id,
+            durationSeconds: 2149,
+            momentCandidates: [],
+          }),
+        );
+      });
+    const thumbnails = jest
+      .spyOn(service as any, 'generateAndStoreThumbnails')
+      .mockResolvedValue(undefined);
+
+    await expect(service.processVod(video, paths)).rejects.toThrow();
+    for (const filename of ['downloads.json', 'video.mp4', 'chat.json']) {
+      await expect(stat(join(vodTempDir, filename))).rejects.toThrow();
+    }
+    expect(thumbnails).not.toHaveBeenCalled();
+    await expect(
+      stat(join(paths.analyzerOutputDir, `${video.id}.json`)),
+    ).rejects.toThrow();
+
+    analyzer.mockImplementation(async () => {
+      await writeFile(
+        join(paths.analyzerOutputDir, 'highlights.json'),
+        JSON.stringify({
+          vodId: video.id,
+          durationSeconds: 44456.7,
+          momentCandidates: [],
+        }),
+      );
+    });
+    await service.processVod(video, paths);
+
+    expect(videoDownload).toHaveBeenCalledTimes(2);
+    expect(chatDownload).toHaveBeenCalledTimes(2);
+    expect(thumbnails).toHaveBeenCalledTimes(1);
+    await expect(
+      readFile(join(paths.analyzerOutputDir, `${video.id}.json`), 'utf8'),
+    ).resolves.toContain('44456.7');
   });
 
   it('keeps temp files when analysis fails and removes them on success', async () => {
@@ -300,7 +656,11 @@ describe('HighlightWorkerService', () => {
     await mkdir(paths.analyzerOutputDir, { recursive: true });
     await writeFile(
       join(paths.analyzerOutputDir, 'vod-2.json'),
-      JSON.stringify({ vodId: 'vod-2', momentCandidates: [] }),
+      JSON.stringify({
+        vodId: 'vod-2',
+        durationSeconds: 18780,
+        momentCandidates: [],
+      }),
     );
     twitchService.getAllArchiveVideosByLogin.mockResolvedValue([
       createVideo({ id: 'vod-1', createdAt: '2026-08-15T00:00:00Z' }),
@@ -344,7 +704,11 @@ describe('HighlightWorkerService', () => {
       processed.push(video.id);
       await writeFile(
         join(paths.analyzerOutputDir, `${video.id}.json`),
-        JSON.stringify({ vodId: video.id, momentCandidates: [] }),
+        JSON.stringify({
+          vodId: video.id,
+          durationSeconds: 18780,
+          momentCandidates: [],
+        }),
       );
       return {};
     });
@@ -420,7 +784,7 @@ describe('HighlightWorkerService', () => {
     for (const vodId of ['vod-1', 'vod-2', 'vod-3']) {
       await writeFile(
         join(paths.analyzerOutputDir, `${vodId}.json`),
-        JSON.stringify({ vodId, momentCandidates: [] }),
+        JSON.stringify({ vodId, durationSeconds: 18780, momentCandidates: [] }),
       );
     }
     twitchService.getAllArchiveVideosByLogin.mockResolvedValue([
@@ -479,7 +843,11 @@ describe('HighlightWorkerService', () => {
     await mkdir(paths.analyzerOutputDir, { recursive: true });
     await writeFile(
       join(paths.analyzerOutputDir, 'vod-2.json'),
-      JSON.stringify({ vodId: 'vod-2', momentCandidates: [] }),
+      JSON.stringify({
+        vodId: 'vod-2',
+        durationSeconds: 18780,
+        momentCandidates: [],
+      }),
     );
     twitchService.getAllArchiveVideosByLogin.mockResolvedValue([
       createVideo({ id: 'vod-1', createdAt: '2026-08-15T00:00:00Z' }),
@@ -538,7 +906,11 @@ describe('HighlightWorkerService', () => {
     await mkdir(paths.analyzerOutputDir, { recursive: true });
     await writeFile(
       join(paths.analyzerOutputDir, 'vod-1.json'),
-      JSON.stringify({ vodId: 'vod-1', momentCandidates: [] }),
+      JSON.stringify({
+        vodId: 'vod-1',
+        durationSeconds: 18780,
+        momentCandidates: [],
+      }),
     );
     twitchService.getAllArchiveVideosByLogin.mockResolvedValue([
       createVideo({ id: 'vod-1' }),
@@ -775,7 +1147,9 @@ describe('HighlightWorkerService', () => {
   it('downsamples visualizationTimeline and keeps bucket peaks', async () => {
     const paths = await createTempPaths();
     const { service } = createService();
-    const lines = ['timestamp_seconds,audio_delta,event_chat_score,chat_message_count_10s'];
+    const lines = [
+      'timestamp_seconds,audio_delta,event_chat_score,chat_message_count_10s',
+    ];
 
     for (let second = 0; second < 2000; second += 1) {
       const audioDelta = second === 1999 ? 100 : second % 7;
@@ -784,7 +1158,10 @@ describe('HighlightWorkerService', () => {
     }
 
     await mkdir(paths.analyzerOutputDir, { recursive: true });
-    await writeFile(join(paths.analyzerOutputDir, 'timeline.csv'), lines.join('\n'));
+    await writeFile(
+      join(paths.analyzerOutputDir, 'timeline.csv'),
+      lines.join('\n'),
+    );
 
     const timeline = await (service as any).buildVisualizationTimeline(
       paths.analyzerOutputDir,
@@ -794,13 +1171,18 @@ describe('HighlightWorkerService', () => {
     expect(timeline.points.length).toBeLessThanOrEqual(1800);
     expect(
       timeline.points.some(
-        (point: { audio: { rawDelta: number; peakTimestampSeconds: number } }) =>
-          point.audio.rawDelta === 100 && point.audio.peakTimestampSeconds === 1999,
+        (point: {
+          audio: { rawDelta: number; peakTimestampSeconds: number };
+        }) =>
+          point.audio.rawDelta === 100 &&
+          point.audio.peakTimestampSeconds === 1999,
       ),
     ).toBe(true);
     expect(
       timeline.points.some(
-        (point: { chat: { messageCount10s: number; peakTimestampSeconds: number } }) =>
+        (point: {
+          chat: { messageCount10s: number; peakTimestampSeconds: number };
+        }) =>
           point.chat.messageCount10s === 50 &&
           point.chat.peakTimestampSeconds === 1000,
       ),
@@ -812,7 +1194,10 @@ describe('HighlightWorkerService', () => {
     const { service } = createService();
 
     await mkdir(paths.analyzerOutputDir, { recursive: true });
-    await writeFile(join(paths.analyzerOutputDir, 'timeline.csv'), 'timestamp_seconds\n');
+    await writeFile(
+      join(paths.analyzerOutputDir, 'timeline.csv'),
+      'timestamp_seconds\n',
+    );
 
     const timeline = await (service as any).buildVisualizationTimeline(
       paths.analyzerOutputDir,
@@ -1174,7 +1559,11 @@ describe('HighlightWorkerService', () => {
     await mkdir(paths.analyzerOutputDir, { recursive: true });
     await writeFile(
       join(paths.analyzerOutputDir, 'vod-1.json'),
-      JSON.stringify({ vodId: 'vod-1', momentCandidates: [] }),
+      JSON.stringify({
+        vodId: 'vod-1',
+        durationSeconds: 18780,
+        momentCandidates: [],
+      }),
     );
     twitchService.getAllArchiveVideosByLogin.mockResolvedValue([
       createVideo({ id: 'vod-1' }),

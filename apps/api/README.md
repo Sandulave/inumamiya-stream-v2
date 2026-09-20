@@ -168,7 +168,9 @@ tools/highlight-analyzer/output/<vodId>.json へ保存
 成功時のみ一時ファイル削除
 ```
 
-再解析時も既存JSONは解析開始前に削除しません。`analyze.py` が新しい `output/highlights.json` を生成し、`vodId` と `momentCandidates` のvalidationに成功した場合だけ、`output/<vodId>.json.tmp` を経由してatomic replaceします。再解析に失敗したVODは以前の `<vodId>.json` を維持し、tempを残して次回resumeできるようにします。
+再解析時も既存JSONは解析開始前に削除しません。`analyze.py` が新しい `output/highlights.json` を生成し、`vodId`、`momentCandidates` と解析時間の検証に成功した場合だけ、`output/<vodId>.json.tmp` を経由してatomic replaceします。Twitchのアーカイブ時間に対して60秒を超えて短い結果は保存せず、動画とChatを破棄して次回再取得します。再解析に失敗しても以前の `<vodId>.json` を維持します。
+
+解析済み判定でも現在のTwitchのアーカイブ時間と比較します。時間情報がない結果や全編に満たない結果は、通常の `highlight:analyze-missing-all` / server workerで再解析対象になります。60秒以内のコンテナ・Twitch間の時間差は許容します。
 
 出力先:
 
@@ -206,11 +208,11 @@ archiveが0件の場合も正常終了します。
 Resume:
 
 ```text
-tools/highlight-worker-temp/<vodId>/video.mp4  が存在しsize > 0 → video download skip
-tools/highlight-worker-temp/<vodId>/chat.json  がvalid JSON     → chat download skip
+tools/highlight-worker-temp/<vodId>/downloads.json が動画・Chat両方の取得完了を記録
+記録されたvodId・Twitchの動画時間が今回と一致し、動画が空でなくChatがvalid JSON → 両方再利用
 ```
 
-途中失敗時は再試行しやすいよう一時ファイルを残します。成功して `<vodId>.json` の保存まで完了した場合のみ削除します。
+取得完了記録がない古い一時ファイルや、アーカイブ時間が変わった場合は動画・Chat両方を再取得します。解析エラー時も取得完了記録を無効化して再取得します。サムネイル生成・保存段階での失敗時は取得済みファイルを再利用できます。成功して `<vodId>.json` の保存まで完了した場合は一時ディレクトリを削除します。
 
 Archive同期:
 
