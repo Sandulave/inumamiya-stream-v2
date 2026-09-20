@@ -1,7 +1,23 @@
 import unittest
+from statistics import median
 
-from chat_json import ChatComment, attach_chat_json_metrics
+from chat_json import (
+    ChatComment,
+    LOCAL_BASELINE_WINDOW_SECONDS,
+    LOW_ACTIVITY_COUNT_10S,
+    LOW_ACTIVITY_COUNT_30S,
+    STRONG_ACTIVITY_COUNT_10S,
+    STRONG_ACTIVITY_COUNT_30S,
+    attach_chat_json_metrics,
+    compute_activity_percentile_scores,
+    compute_local_burst_scores,
+    percentile_rank,
+    rolling_count,
+    rolling_counts,
+    soft_activity_gate,
+)
 from models import SampleMetrics
+from scoring import clamp, percentile
 
 
 class ChatJsonScoringTest(unittest.TestCase):
@@ -88,12 +104,100 @@ class ChatJsonScoringTest(unittest.TestCase):
             self.assertNotEqual(sample.chat_json_score, float("-inf"))
             self.assertEqual(sample.chat_json_score, 0)
 
+    def test_optimized_chat_windows_and_scores_match_reference_calculation(self):
+        samples = [
+            SampleMetrics(timestamp_seconds=float(second), timestamp=str(second))
+            for second in range(180)
+        ]
+        for index, sample in enumerate(samples):
+            sample.chat_message_count = (index * 7 + index // 11) % 5
+
+        for window_seconds in (5.0, 10.0, 30.0):
+            self.assertEqual(
+                rolling_counts(samples, window_seconds),
+                [
+                    rolling_count(samples, index, window_seconds)
+                    for index in range(len(samples))
+                ],
+            )
+
+        for sample, count in zip(samples, rolling_counts(samples, 10.0)):
+            sample.chat_message_count_10s = count
+        for sample, count in zip(samples, rolling_counts(samples, 30.0)):
+            sample.chat_message_count_30s = count
+
+        expected_activity = reference_activity_scores(samples)
+        expected_burst = reference_burst_scores(samples)
+
+        self.assertEqual(
+            compute_activity_percentile_scores(samples),
+            expected_activity,
+        )
+        self.assertEqual(
+            compute_local_burst_scores(samples, LOCAL_BASELINE_WINDOW_SECONDS),
+            expected_burst,
+        )
+
 
 def make_samples(seconds: int) -> list[SampleMetrics]:
     return [
         SampleMetrics(timestamp_seconds=second, timestamp=f"00:00:{second % 60:02d}")
         for second in range(seconds)
     ]
+
+
+def reference_activity_scores(samples: list[SampleMetrics]) -> list[float]:
+    count_10s_values = [float(sample.chat_message_count_10s) for sample in samples]
+    count_30s_values = [float(sample.chat_message_count_30s) for sample in samples]
+    dynamic_strong_30s = max(
+        STRONG_ACTIVITY_COUNT_30S,
+        percentile(count_30s_values, 90),
+    )
+    scores: list[float] = []
+    for sample in samples:
+        count_10s = float(sample.chat_message_count_10s)
+        count_30s = float(sample.chat_message_count_30s)
+        percentile_score = (
+            percentile_rank(count_10s_values, count_10s) * 0.35
+            + percentile_rank(count_30s_values, count_30s) * 0.65
+        )
+        activity_gate = (
+            soft_activity_gate(count_10s, LOW_ACTIVITY_COUNT_10S, STRONG_ACTIVITY_COUNT_10S)
+            * 0.35
+            + soft_activity_gate(count_30s, LOW_ACTIVITY_COUNT_30S, dynamic_strong_30s)
+            * 0.65
+        )
+        scores.append(clamp(percentile_score * activity_gate / 100.0))
+    return scores
+
+
+def reference_burst_scores(samples: list[SampleMetrics]) -> list[float]:
+    scores: list[float] = []
+    for index, sample in enumerate(samples):
+        baseline_counts = [
+            float(previous.chat_message_count_10s)
+            for previous in samples[:index]
+            if previous.timestamp_seconds
+            >= sample.timestamp_seconds - LOCAL_BASELINE_WINDOW_SECONDS
+        ]
+        if not baseline_counts:
+            scores.append(0.0)
+            continue
+        baseline = median(baseline_counts)
+        current = float(sample.chat_message_count_10s)
+        delta = max(0.0, current - baseline)
+        if delta <= 0:
+            scores.append(0.0)
+            continue
+        needed_delta = max(6.0, baseline * 3.0)
+        burst_ratio_score = clamp(delta / needed_delta * 100.0)
+        absolute_count_gate = soft_activity_gate(
+            current,
+            LOW_ACTIVITY_COUNT_10S,
+            STRONG_ACTIVITY_COUNT_10S,
+        )
+        scores.append(clamp(burst_ratio_score * absolute_count_gate / 100.0))
+    return scores
 
 
 if __name__ == "__main__":
