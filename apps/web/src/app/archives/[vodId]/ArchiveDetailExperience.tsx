@@ -127,10 +127,18 @@ export default function ArchiveDetailExperience({
     () => getPrimaryCategory(vodMetadata, chaptersResponse),
     [vodMetadata, chaptersResponse],
   );
-  const activePlayerStartSeconds =
-    selectedMomentSeconds !== undefined
-      ? getPlaybackStart(selectedMomentSeconds)
-      : playerStartSeconds;
+  const activePlayerStartSeconds = playerStartSeconds;
+
+  useEffect(() => {
+    if (selectedMomentSeconds === undefined) {
+      return;
+    }
+
+    const startSeconds = getPlaybackStart(selectedMomentSeconds);
+    setPlayerStartSeconds((current) =>
+      current === startSeconds ? current : startSeconds,
+    );
+  }, [selectedMomentSeconds]);
 
   useEffect(() => {
     if (
