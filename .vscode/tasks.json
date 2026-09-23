@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "スマホ確認: WebをLAN公開",
+      "type": "shell",
+      "command": "pnpm dev:mobile",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

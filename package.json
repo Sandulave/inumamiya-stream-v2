@@ -6,6 +6,7 @@
   "scripts": {
     "analytics:setup": "node scripts/setup-analytics.mjs",
     "dev": "pnpm --parallel --filter web --filter api run dev",
+    "dev:mobile": "pnpm --filter web dev -- --hostname 0.0.0.0",
     "archive:analyze": "pnpm --filter api highlight:analyze-missing-all",
     "archive:reanalyze": "pnpm --filter api highlight:reanalyze-all",
     "archive:worker": "pnpm --filter api highlight:worker"
