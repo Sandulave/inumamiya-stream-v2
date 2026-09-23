@@ -1,0 +1,117 @@
+/* The existing desktop layout stays in globals.css. */
+.mobileChatToggle { display: none; }
+
+@media (max-width: 767px) {
+  .page {
+    padding: 12px 12px max(24px, env(safe-area-inset-bottom));
+    gap: 16px;
+  }
+
+  .heroSection {
+    width: 100%;
+    max-width: 100%;
+    min-height: auto;
+    padding: 16px;
+    border-radius: 18px;
+    box-shadow: 4px 4px 0 rgba(32, 32, 42, .12);
+  }
+
+  .heroLeft { gap: 12px; }
+  .pageHeader { max-width: 100%; padding-right: 76px; }
+  .heroSection .pageLabel { display: none; }
+  .heroSection h1 { font-size: 23px; line-height: 1.35; text-wrap: balance; text-shadow: 2px 2px 0 #ffd84d; }
+  .siteTitleSuffix { display: block; margin-top: 4px; font-size: 18px; }
+  .heroStatusBadge { top: 16px; right: 12px; }
+  .statusBadge { min-height: 28px; padding: 6px 8px; font-size: 10px; border-radius: 10px; }
+  .viewerHeader { max-width: 100%; grid-template-columns: 80px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .profileSummary { grid-column: 1 / -1; padding: 0; }
+  .heroLoginName { font-size: 12px; }
+  .heroProfileSection { width: 80px; }
+  .profileSliderViewport { width: 80px; height: 80px; border-radius: 14px; box-shadow: 3px 3px 0 rgba(32, 32, 42, .12); }
+  .profileSliderAutoTrack { padding: 6px; gap: 8px; }
+  .profileSliderItem { width: 64px; height: 64px; flex-basis: 64px; }
+  .galleryImageWrapper { border-radius: 8px; }
+  .profileDescription { width: auto; max-width: 100%; padding: 8px 10px; font-size: 12px; line-height: 1.7; border-radius: 12px; overflow-wrap: anywhere; box-shadow: none; }
+
+  .twitch-viewer-layout { gap: 12px; }
+  .playerWrapper { border-width: 2px; border-radius: 14px; box-shadow: 4px 4px 0 rgba(32, 32, 42, .12); scroll-margin-top: 12px; }
+  .playerWrapper iframe { width: 100%; }
+  .playerActions { padding: 0 0 4px; gap: 10px; }
+  .subscribeButton, .liveWatchButton { width: auto; flex: 1; min-height: 44px; padding: 8px; font-size: 13px; }
+
+  .chatPanel { min-width: 0; }
+  .mobileChatToggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 14px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+    color: #20202a;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .mobileChatToggle > span:last-child { font-size: 12px; color: var(--muted); }
+  .chatPanel:not(.isChatOpen) .chatWrapper { display: none; }
+  .chatPanel.isChatOpen .chatWrapper { margin-top: 8px; }
+  .chatWrapper { border-radius: 14px; box-shadow: none; }
+  .chatWrapper, .chatWrapper iframe { height: 380px; height: min(60svh, 460px); min-height: 280px; }
+
+  .tabContainer { border-radius: 16px; box-shadow: 4px 4px 0 rgba(32, 32, 42, .12); }
+  .tabList { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 8px; align-items: stretch; }
+  .tabButton { min-width: 0; min-height: 44px; padding: 8px 2px; border: 2px solid var(--border); border-radius: 10px; font-size: 12px; white-space: normal; }
+  .tabButton.active { transform: none; }
+  .tabButton.active::after { left: 12px; right: 12px; bottom: 4px; height: 2px; }
+  .tabPanel { min-height: 0; padding: 14px 12px; }
+  .panelTopBar { flex-direction: column; align-items: stretch; gap: 12px; }
+  .panelTitle { font-size: 18px; }
+  .sortControl { justify-items: stretch; }
+  .sortControlButtons { width: 100%; }
+  .sortButton { flex: 1; min-height: 44px; }
+  .archiveGrid, .clipGrid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .clipInfo { padding: 12px; gap: 6px; }
+  .clipTitle { font-size: 14px; overflow-wrap: anywhere; }
+  .clipMeta { font-size: 12px; }
+  .archiveActions { gap: 8px; }
+  .archiveWatchLink { flex: 1; }
+  .archiveHighlightLink { flex: 2; }
+  .playingBadge { width: 100%; min-height: 32px; }
+  .highlightExploreLink, .loadMoreButton, .gamePlayButton { min-height: 44px; font-size: 13px; }
+  .linkGrid, .gameGrid, .pcSpecGrid { grid-template-columns: minmax(0, 1fr); }
+  .linkCard, .gameCard, .pcSpecCard { min-width: 0; overflow-wrap: anywhere; }
+  .feedbackField input, .feedbackField textarea { font-size: 16px; }
+  .feedbackField input, .feedbackFormFooter button, .feedbackDeleteButton { min-height: 44px; }
+  .feedbackPostHeader { flex-wrap: wrap; gap: 8px; }
+
+  .highlightHeader { padding: 16px; border-radius: 18px; }
+  .highlightHeader h1 { font-size: 24px; line-height: 1.4; overflow-wrap: anywhere; text-shadow: 2px 2px 0 #ffd84d; }
+  .highlightLead { font-size: 13px; }
+  .highlightVodMeta { gap: 6px; }
+  .highlightVodMeta span { font-size: 12px; overflow-wrap: anywhere; }
+  .backToArchivesLink { min-height: 44px; font-size: 13px; }
+  .archiveModeSwitch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; gap: 8px; border-radius: 14px; }
+  .archiveModeButton { min-width: 0; min-height: 48px; padding: 8px 4px; font-size: 13px; }
+  .archiveOverviewPanel { padding: 14px; border-radius: 16px; }
+  .archiveOverviewPanel h2 { font-size: 20px; overflow-wrap: anywhere; }
+  .highlightExplorerLayout { padding: 12px; border-radius: 16px; }
+  .highlightListHeader, .highlightHeaderActions { gap: 10px; }
+  .highlightListHeader { flex-direction: column; }
+  .highlightHeaderActions { justify-content: flex-start; }
+  .highlightAboutLink, .highlightClipToggle { min-height: 44px; }
+  .highlightInfoPopover { left: 0; right: auto; width: min(320px, calc(100vw - 64px)); }
+  .highlightControl select { min-width: 0; min-height: 48px; font-size: 16px; }
+  .chapterTrack { height: 48px; }
+  .chapterStripTop, .timelineGraphTop { flex-wrap: wrap; gap: 8px; }
+  .timelineTooltip { overflow-wrap: anywhere; }
+  .timelineGraph > svg { touch-action: pan-y; }
+  .selectedMomentSummary { flex-wrap: wrap; }
+  .momentCard.hasThumbnail { grid-template-columns: minmax(0, 1fr); }
+  .momentSignal { grid-template-columns: 1fr; gap: 4px; }
+  .momentCardActions { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .watchMomentButton, .shareMomentButton { width: 100%; min-height: 44px; font-size: 14px; }
+}

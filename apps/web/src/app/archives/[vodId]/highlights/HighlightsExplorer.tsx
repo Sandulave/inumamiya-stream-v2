@@ -257,7 +257,9 @@ function TimelineGraph({
   return (
     <div
       className={`timelineGraph timelineGraph-${tone}`}
-      onPointerLeave={() => {
+      onPointerLeave={(event) => {
+        // Touch pointers leave after lift-off; retain the range for the next tap.
+        if (event.pointerType === 'touch') return;
         setHovered(null);
         setFocusCenterSeconds(null);
         setPreviewCenterSeconds(null);

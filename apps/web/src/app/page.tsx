@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import ProfileSlider from './components/ProfileSlider';
 import ViewerExperience from './components/ViewerExperience';
+import ChatPanel from './components/ChatPanel';
 
 type TwitchUser = {
   id: string;
@@ -219,7 +220,7 @@ export default async function Home() {
             <header className="pageHeader">
               <div>
                 <p className="pageLabel">Twitch fan viewing portal</p>
-                <h1>いぬまみや専用視聴ページ</h1>
+                <h1>いぬまみや<span className="siteTitleSuffix">専用視聴ページ</span></h1>
               </div>
             </header>
 
@@ -265,16 +266,7 @@ export default async function Home() {
               initialVideoCursor={videoData?.pagination?.cursor}
             />
           </div>
-        <aside className="chatPanel">
-          <div className="chatWrapper">
-            <iframe
-              src={chatSrc}
-              title="Twitch Chat"
-              frameBorder="0"
-              scrolling="no"
-            />
-          </div>
-        </aside>
+        <ChatPanel src={chatSrc} />
       </section>
     </main>
   );

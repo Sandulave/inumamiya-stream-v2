@@ -114,3 +114,36 @@
   .analyticsBreakdowns { grid-template-columns: 1fr; gap: 0; }
   .analyticsLogin { margin-top: 70px; }
 }
+
+/* Phone layout only; desktop rules above remain unchanged. */
+@media (max-width: 767px) {
+  .analyticsRoot { min-height: 100svh; }
+  .analyticsHeader { height: auto; min-height: 68px; padding: 12px 16px; flex-wrap: wrap; gap: 12px; }
+  .analyticsBrand { gap: 8px; font-size: 13px; }
+  .analyticsBrand > span { padding-left: 8px; }
+  .analyticsHeader nav { gap: 8px; margin-left: auto; }
+  .analyticsIconButton { width: 44px; height: 44px; flex-basis: 44px; }
+  .analyticsTextButton { min-height: 44px; padding: 0 10px; }
+  .analyticsContent { padding: 24px 16px max(20px, env(safe-area-inset-bottom)); }
+  .analyticsTitleRow { flex-direction: column; align-items: stretch; gap: 20px; }
+  .analyticsRoot h1 { font-size: 25px; }
+  .analyticsPeriod { width: 100%; gap: 8px; }
+  .analyticsPeriod nav { flex: 1; min-width: 0; }
+  .analyticsPeriod a { display: flex; align-items: center; justify-content: center; flex: 1; min-height: 44px; padding: 6px 2px; font-size: 12px; }
+  .analyticsDateRow { gap: 8px; font-size: 11px; }
+  .analyticsStats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 24px; }
+  .analyticsStats > div { padding: 0 12px; }
+  .analyticsStats > div:nth-child(odd) { border: 0; padding-left: 0; }
+  .analyticsStats dt { font-size: 12px; }
+  .analyticsStats dd { font-size: 28px; }
+  .analyticsStats dd span { font-size: 11px; margin-left: 4px; }
+  .analyticsSectionHeading { flex-wrap: wrap; gap: 8px; }
+  .analyticsChartWrap { height: 180px; grid-template-columns: 28px minmax(0, 1fr); }
+  .analyticsChartDates { padding-left: 36px; }
+  .analyticsTable th:not(:first-child), .analyticsTable td:not(:first-child) { width: 56px; overflow-wrap: anywhere; }
+  .analyticsTable { font-size: 12px; }
+  .analyticsPageCell { gap: 6px; padding-right: 8px; }
+  .analyticsBreakdowns { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .analyticsFooter { flex-wrap: wrap; gap: 8px; }
+  .analyticsLogin { margin-top: clamp(32px, 8svh, 64px); margin-bottom: 32px; }
+}

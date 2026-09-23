@@ -24,7 +24,7 @@ export function buildTwitchPlayerSrc({
   type,
   id,
   parentHost,
-  autoplay = true,
+  autoplay = false,
   muted = false,
   startSeconds,
 }: Omit<Props, 'title' | 'className'>) {
@@ -54,7 +54,7 @@ export default function TwitchPlayerFrame({
   id,
   parentHost,
   title = 'Twitch Player',
-  autoplay = true,
+  autoplay = false,
   muted = false,
   startSeconds,
   className,
