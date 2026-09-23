@@ -73,6 +73,8 @@ export default function TwitchPlayerFrame({
       className={className}
       src={src}
       title={title}
+      width="100%"
+      height="100%"
       allow="autoplay; fullscreen"
       allowFullScreen
       frameBorder="0"
