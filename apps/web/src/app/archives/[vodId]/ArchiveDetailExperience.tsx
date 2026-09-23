@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import InteractiveTwitchVodPlayer from '../../components/InteractiveTwitchVodPlayer';
 import {
   HighlightChaptersResponse,
@@ -115,6 +115,9 @@ export default function ArchiveDetailExperience({
   const [playerStartSeconds, setPlayerStartSeconds] = useState(
     initialMomentSeconds !== undefined ? getPlaybackStart(initialMomentSeconds) : 0,
   );
+  const [scrollTargetMomentSeconds, setScrollTargetMomentSeconds] = useState<number | null>(
+    null,
+  );
   const playerColumnRef = useRef<HTMLDivElement>(null);
   const playerActionRef = useRef<((timestampSeconds: number) => void) | null>(null);
   const pendingPlayerStartRef = useRef<number | null>(null);
@@ -129,6 +132,23 @@ export default function ArchiveDetailExperience({
     selectedMomentSeconds !== undefined
       ? getPlaybackStart(selectedMomentSeconds)
       : playerStartSeconds;
+
+  useEffect(() => {
+    if (
+      scrollTargetMomentSeconds === null ||
+      scrollTargetMomentSeconds !== selectedMomentSeconds ||
+      !window.matchMedia('(max-width: 767px)').matches
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      playerColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setScrollTargetMomentSeconds(null);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [scrollTargetMomentSeconds, selectedMomentSeconds]);
 
   function showArchive() {
     router.push(buildArchivePath(vodId));
@@ -146,12 +166,8 @@ export default function ArchiveDetailExperience({
       playerActionRef.current(startSeconds);
       pendingPlayerStartRef.current = null;
     }
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      window.requestAnimationFrame(() => {
-        playerColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    }
-    router.push(buildHighlightsPath(vodId, moment.timestampSeconds));
+    setScrollTargetMomentSeconds(moment.timestampSeconds);
+    router.push(buildHighlightsPath(vodId, moment.timestampSeconds), { scroll: false });
   }
 
   function seekTimestamp(timestampSeconds: number) {
