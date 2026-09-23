@@ -96,6 +96,7 @@
   .backToArchivesLink { min-height: 44px; font-size: 13px; }
   .archiveModeSwitch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; gap: 8px; border-radius: 14px; }
   .archiveModeButton { min-width: 0; min-height: 48px; padding: 8px 4px; font-size: 13px; }
+  .archiveDetailPlayerColumn { scroll-margin-top: 16px; }
   .archiveOverviewPanel { padding: 14px; border-radius: 16px; }
   .archiveOverviewPanel h2 { font-size: 20px; overflow-wrap: anywhere; }
   .highlightExplorerLayout { padding: 12px; border-radius: 16px; }
