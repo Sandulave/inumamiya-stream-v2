@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import InteractiveTwitchVodPlayer from '../../components/InteractiveTwitchVodPlayer';
+import TwitchPlayerFrame from '../../components/TwitchPlayerFrame';
 import {
   HighlightChaptersResponse,
   HighlightFilters,
@@ -119,8 +119,7 @@ export default function ArchiveDetailExperience({
     null,
   );
   const playerColumnRef = useRef<HTMLDivElement>(null);
-  const playerActionRef = useRef<((timestampSeconds: number) => void) | null>(null);
-  const pendingPlayerStartRef = useRef<number | null>(null);
+  const [playbackRequestId, setPlaybackRequestId] = useState(0);
   const [shareFeedbackMomentSeconds, setShareFeedbackMomentSeconds] = useState<
     number | null
   >(null);
@@ -161,11 +160,7 @@ export default function ArchiveDetailExperience({
   function selectMoment(moment: HighlightMoment) {
     const startSeconds = getPlaybackStart(moment.timestampSeconds);
     setPlayerStartSeconds(startSeconds);
-    pendingPlayerStartRef.current = startSeconds;
-    if (playerActionRef.current) {
-      playerActionRef.current(startSeconds);
-      pendingPlayerStartRef.current = null;
-    }
+    setPlaybackRequestId((current) => current + 1);
     setScrollTargetMomentSeconds(moment.timestampSeconds);
     router.push(buildHighlightsPath(vodId, moment.timestampSeconds), { scroll: false });
   }
@@ -173,22 +168,8 @@ export default function ArchiveDetailExperience({
   function seekTimestamp(timestampSeconds: number) {
     const startSeconds = Math.max(0, Math.floor(timestampSeconds));
     setPlayerStartSeconds(startSeconds);
-    pendingPlayerStartRef.current = startSeconds;
-    if (playerActionRef.current) {
-      playerActionRef.current(startSeconds);
-      pendingPlayerStartRef.current = null;
-    }
+    setPlaybackRequestId((current) => current + 1);
     router.replace(buildHighlightsPath(vodId));
-  }
-
-  function handlePlayerReady(playAt: (timestampSeconds: number) => void) {
-    playerActionRef.current = playAt;
-    const pendingStartSeconds = pendingPlayerStartRef.current;
-
-    if (pendingStartSeconds !== null) {
-      pendingPlayerStartRef.current = null;
-      playAt(pendingStartSeconds);
-    }
   }
 
   async function shareMoment(moment: HighlightMoment) {
@@ -249,11 +230,13 @@ export default function ArchiveDetailExperience({
       >
         <div ref={playerColumnRef} className="archiveDetailPlayerColumn">
           <div className="highlightPlayerShell archiveDetailPlayer">
-            <InteractiveTwitchVodPlayer
-              vodId={vodId}
+            <TwitchPlayerFrame
+              key={`${vodId}-${activePlayerStartSeconds}-${playbackRequestId}`}
+              type="vod"
+              id={vodId}
               parentHost={parentHost}
+              autoplay={false}
               startSeconds={activePlayerStartSeconds}
-              onReady={handlePlayerReady}
               title="Twitchアーカイブプレイヤー"
             />
           </div>
