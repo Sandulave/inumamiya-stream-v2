@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import TwitchPlayerFrame from '../../components/TwitchPlayerFrame';
+import { useMemo, useRef, useState } from 'react';
+import InteractiveTwitchVodPlayer from '../../components/InteractiveTwitchVodPlayer';
 import {
   HighlightChaptersResponse,
   HighlightFilters,
@@ -115,7 +115,9 @@ export default function ArchiveDetailExperience({
   const [playerStartSeconds, setPlayerStartSeconds] = useState(
     initialMomentSeconds !== undefined ? getPlaybackStart(initialMomentSeconds) : 0,
   );
-  const [playbackRequestId, setPlaybackRequestId] = useState(0);
+  const playerColumnRef = useRef<HTMLDivElement>(null);
+  const playerActionRef = useRef<((timestampSeconds: number) => void) | null>(null);
+  const pendingPlayerStartRef = useRef<number | null>(null);
   const [shareFeedbackMomentSeconds, setShareFeedbackMomentSeconds] = useState<
     number | null
   >(null);
@@ -137,15 +139,40 @@ export default function ArchiveDetailExperience({
   }
 
   function selectMoment(moment: HighlightMoment) {
-    setPlayerStartSeconds(getPlaybackStart(moment.timestampSeconds));
-    setPlaybackRequestId((current) => current + 1);
+    const startSeconds = getPlaybackStart(moment.timestampSeconds);
+    setPlayerStartSeconds(startSeconds);
+    pendingPlayerStartRef.current = startSeconds;
+    if (playerActionRef.current) {
+      playerActionRef.current(startSeconds);
+      pendingPlayerStartRef.current = null;
+    }
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      window.requestAnimationFrame(() => {
+        playerColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
     router.push(buildHighlightsPath(vodId, moment.timestampSeconds));
   }
 
   function seekTimestamp(timestampSeconds: number) {
-    setPlayerStartSeconds(Math.max(0, Math.floor(timestampSeconds)));
-    setPlaybackRequestId((current) => current + 1);
+    const startSeconds = Math.max(0, Math.floor(timestampSeconds));
+    setPlayerStartSeconds(startSeconds);
+    pendingPlayerStartRef.current = startSeconds;
+    if (playerActionRef.current) {
+      playerActionRef.current(startSeconds);
+      pendingPlayerStartRef.current = null;
+    }
     router.replace(buildHighlightsPath(vodId));
+  }
+
+  function handlePlayerReady(playAt: (timestampSeconds: number) => void) {
+    playerActionRef.current = playAt;
+    const pendingStartSeconds = pendingPlayerStartRef.current;
+
+    if (pendingStartSeconds !== null) {
+      pendingPlayerStartRef.current = null;
+      playAt(pendingStartSeconds);
+    }
   }
 
   async function shareMoment(moment: HighlightMoment) {
@@ -204,14 +231,13 @@ export default function ArchiveDetailExperience({
           view === 'highlights' ? 'isHighlights' : 'isArchive'
         }`}
       >
-        <div className="archiveDetailPlayerColumn">
+        <div ref={playerColumnRef} className="archiveDetailPlayerColumn">
           <div className="highlightPlayerShell archiveDetailPlayer">
-            <TwitchPlayerFrame
-              key={`${vodId}-${activePlayerStartSeconds}-${playbackRequestId}`}
-              type="vod"
-              id={vodId}
+            <InteractiveTwitchVodPlayer
+              vodId={vodId}
               parentHost={parentHost}
               startSeconds={activePlayerStartSeconds}
+              onReady={handlePlayerReady}
               title="Twitchアーカイブプレイヤー"
             />
           </div>

@@ -584,7 +584,7 @@ export default function HighlightsExplorer({
             <span className="selectedMomentBadge">選択中</span>
             <div>
               <p>{selectedMoment.timestamp}</p>
-              <span>見どころの少し前から再生します</span>
+              <span>見どころの少し前へ移動しました。再生はプレイヤーの▶から始められます</span>
             </div>
           </div>
         ) : null}

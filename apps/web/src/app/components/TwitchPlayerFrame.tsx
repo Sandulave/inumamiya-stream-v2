@@ -11,7 +11,7 @@ type Props = {
   className?: string;
 };
 
-function formatTwitchTime(seconds: number) {
+export function formatTwitchTime(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);

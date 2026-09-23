@@ -110,8 +110,18 @@
   .timelineTooltip { overflow-wrap: anywhere; }
   .timelineGraph > svg { touch-action: pan-y; }
   .selectedMomentSummary { flex-wrap: wrap; }
-  .momentCard.hasThumbnail { grid-template-columns: minmax(0, 1fr); }
-  .momentSignal { grid-template-columns: 1fr; gap: 4px; }
-  .momentCardActions { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .watchMomentButton, .shareMomentButton { width: 100%; min-height: 44px; font-size: 14px; }
+  .momentList { gap: 10px; }
+  .momentCard { gap: 8px; padding: 10px; border-radius: 14px; box-shadow: 4px 4px 0 rgba(32, 32, 42, .1); }
+  .momentCard.hasThumbnail { grid-template-columns: 104px minmax(0, 1fr); }
+  .momentThumbnail { border-radius: 10px; }
+  .momentCardBody { gap: 8px; }
+  .momentCardTop { gap: 8px; }
+  .momentTimestamp { font-size: 19px; }
+  .momentSignals { gap: 5px; }
+  .momentSignal { grid-template-columns: minmax(84px, auto) minmax(0, 1fr); gap: 6px; font-size: 12px; }
+  .starRating { font-size: 15px; }
+  .momentCardActions { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .watchMomentButton, .shareMomentButton { min-height: 40px; font-size: 13px; }
+  .watchMomentButton { width: 100%; }
+  .shareMomentButton { width: auto; min-width: 72px; }
 }
