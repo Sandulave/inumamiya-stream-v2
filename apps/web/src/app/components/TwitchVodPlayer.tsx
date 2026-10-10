@@ -84,7 +84,10 @@ export default function TwitchVodPlayer({
 
     function onReady() {
       ready = true;
-      requestPlayback();
+      // The constructor's `time` already initializes shared-link playback.
+      // Only defer an explicit page action: queuing the initial position here
+      // would overwrite a native Twitch seek when the user first presses play.
+      if (pendingRef.current.playbackRequestId > 0) requestPlayback();
     }
     function onPlaying() {
       hasStartedPlayback = true;
