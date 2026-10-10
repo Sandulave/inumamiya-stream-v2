@@ -2,6 +2,21 @@
 .mobileChatToggle { display: none; }
 
 .twitchVodPlayer { position: absolute; inset: 0; }
+.twitchPlaybackNotice {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(0, 0, 0, .85);
+  font-size: 14px;
+  line-height: 1.5;
+  pointer-events: none;
+}
 .momentTimestampButton {
   min-height: 44px;
   padding: 4px 8px;
