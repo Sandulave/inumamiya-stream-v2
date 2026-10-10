@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import TwitchPlayerFrame from '../../components/TwitchPlayerFrame';
+import TwitchVodPlayer from '../../components/TwitchVodPlayer';
 import {
   HighlightChaptersResponse,
   HighlightFilters,
@@ -95,7 +95,6 @@ function getPrimaryCategory(
 export default function ArchiveDetailExperience({
   vodId,
   parentHost,
-  initialView,
   initialMomentSeconds,
   filters,
   resultStatus,
@@ -107,7 +106,7 @@ export default function ArchiveDetailExperience({
   const router = useRouter();
   const searchParams = useSearchParams();
   const view: ArchiveViewMode =
-    searchParams.get('view') === 'highlights' ? 'highlights' : initialView;
+    searchParams.get('view') === 'highlights' ? 'highlights' : 'archive';
   const selectedMomentSeconds =
     view === 'highlights'
       ? parseMomentParam(searchParams.get('moment'))
@@ -115,9 +114,15 @@ export default function ArchiveDetailExperience({
   const [playerStartSeconds, setPlayerStartSeconds] = useState(
     initialMomentSeconds !== undefined ? getPlaybackStart(initialMomentSeconds) : 0,
   );
-  const [scrollTargetMomentSeconds, setScrollTargetMomentSeconds] = useState<number | null>(
-    null,
-  );
+  const [previousMomentSeconds, setPreviousMomentSeconds] = useState(selectedMomentSeconds);
+  // Apply URL changes (including Back/Forward) before rendering the player.
+  // A click's explicit target must not be overwritten by the previous URL.
+  if (previousMomentSeconds !== selectedMomentSeconds) {
+    setPreviousMomentSeconds(selectedMomentSeconds);
+    if (selectedMomentSeconds !== undefined) {
+      setPlayerStartSeconds(getPlaybackStart(selectedMomentSeconds));
+    }
+  }
   const playerColumnRef = useRef<HTMLDivElement>(null);
   const [playbackRequestId, setPlaybackRequestId] = useState(0);
   const [shareFeedbackMomentSeconds, setShareFeedbackMomentSeconds] = useState<
@@ -127,35 +132,24 @@ export default function ArchiveDetailExperience({
     () => getPrimaryCategory(vodMetadata, chaptersResponse),
     [vodMetadata, chaptersResponse],
   );
-  const activePlayerStartSeconds = playerStartSeconds;
-
-  useEffect(() => {
-    if (selectedMomentSeconds === undefined) {
-      return;
-    }
-
-    const startSeconds = getPlaybackStart(selectedMomentSeconds);
-    setPlayerStartSeconds((current) =>
-      current === startSeconds ? current : startSeconds,
-    );
-  }, [selectedMomentSeconds]);
 
   useEffect(() => {
     if (
-      scrollTargetMomentSeconds === null ||
-      scrollTargetMomentSeconds !== selectedMomentSeconds ||
+      playbackRequestId === 0 ||
       !window.matchMedia('(max-width: 767px)').matches
     ) {
       return;
     }
 
     const timer = window.setTimeout(() => {
-      playerColumnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setScrollTargetMomentSeconds(null);
+      playerColumnRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+        block: 'start',
+      });
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [scrollTargetMomentSeconds, selectedMomentSeconds]);
+  }, [playbackRequestId]);
 
   function showArchive() {
     router.push(buildArchivePath(vodId));
@@ -169,15 +163,20 @@ export default function ArchiveDetailExperience({
     const startSeconds = getPlaybackStart(moment.timestampSeconds);
     setPlayerStartSeconds(startSeconds);
     setPlaybackRequestId((current) => current + 1);
-    setScrollTargetMomentSeconds(moment.timestampSeconds);
-    router.push(buildHighlightsPath(vodId, moment.timestampSeconds), { scroll: false });
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', 'highlights');
+    params.set('moment', String(Math.floor(moment.timestampSeconds)));
+    window.history.pushState(null, '', `${buildArchivePath(vodId)}?${params}`);
   }
 
   function seekTimestamp(timestampSeconds: number) {
     const startSeconds = Math.max(0, Math.floor(timestampSeconds));
     setPlayerStartSeconds(startSeconds);
     setPlaybackRequestId((current) => current + 1);
-    router.replace(buildHighlightsPath(vodId));
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', 'highlights');
+    params.delete('moment');
+    window.history.replaceState(null, '', `${buildArchivePath(vodId)}?${params}`);
   }
 
   async function shareMoment(moment: HighlightMoment) {
@@ -238,14 +237,12 @@ export default function ArchiveDetailExperience({
       >
         <div ref={playerColumnRef} className="archiveDetailPlayerColumn">
           <div className="highlightPlayerShell archiveDetailPlayer">
-            <TwitchPlayerFrame
-              key={`${vodId}-${activePlayerStartSeconds}-${playbackRequestId}`}
-              type="vod"
+            <TwitchVodPlayer
+              key={vodId}
               id={vodId}
               parentHost={parentHost}
-              autoplay={false}
-              startSeconds={activePlayerStartSeconds}
-              title="Twitchアーカイブプレイヤー"
+              startSeconds={playerStartSeconds}
+              playbackRequestId={playbackRequestId}
             />
           </div>
         </div>

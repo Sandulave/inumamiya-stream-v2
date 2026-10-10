@@ -1,7 +1,43 @@
 /* The existing desktop layout stays in globals.css. */
 .mobileChatToggle { display: none; }
 
+.twitchVodPlayer { position: absolute; inset: 0; }
+.momentTimestampButton {
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff3c6;
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.momentTimestampButton:focus-visible { outline: 3px solid #9146ff; outline-offset: 3px; }
+
+.archiveDetailPlayer:fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  min-height: 0;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.archiveDetailPlayer:fullscreen iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 @media (max-width: 767px) {
+  /* Keep the viewport as the sticky scroll container on archive pages. */
+  html:has(.archiveDetailShell), body:has(.archiveDetailShell) {
+    overflow-x: clip;
+  }
+
   .page {
     padding: 12px 12px max(24px, env(safe-area-inset-bottom));
     gap: 16px;
@@ -35,7 +71,14 @@
 
   .twitch-viewer-layout { gap: 12px; }
   .playerWrapper { border-width: 2px; border-radius: 14px; box-shadow: 4px 4px 0 rgba(32, 32, 42, .12); scroll-margin-top: 12px; }
-  .playerWrapper iframe { width: 100%; }
+  /* Leave room for Twitch's title and controls on narrow screens. */
+  .playerWrapper, .highlightPlayerShell { min-width: 0; min-height: 306px; }
+  .playerWrapper iframe, .highlightPlayerShell iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
   .playerActions { padding: 0 0 4px; gap: 10px; }
   .subscribeButton, .liveWatchButton { width: auto; flex: 1; min-height: 44px; padding: 8px; font-size: 13px; }
 
@@ -90,16 +133,30 @@
 
   .highlightHeader { padding: 16px; border-radius: 18px; }
   .highlightHeader h1 { font-size: 24px; line-height: 1.4; overflow-wrap: anywhere; text-shadow: 2px 2px 0 #ffd84d; }
-  .highlightLead { font-size: 13px; }
+  .highlightLead { display: none; }
   .highlightVodMeta { gap: 6px; }
   .highlightVodMeta span { font-size: 12px; overflow-wrap: anywhere; }
   .backToArchivesLink { min-height: 44px; font-size: 13px; }
   .archiveModeSwitch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; gap: 8px; border-radius: 14px; }
   .archiveModeButton { min-width: 0; min-height: 48px; padding: 8px 4px; font-size: 13px; }
-  .archiveDetailPlayerColumn { scroll-margin-top: 16px; }
+  .archiveDetailPlayerColumn {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    align-self: start;
+    scroll-margin-top: 16px;
+    background: #080808;
+    border-radius: 12px;
+  }
   .archiveOverviewPanel { padding: 14px; border-radius: 16px; }
   .archiveOverviewPanel h2 { font-size: 20px; overflow-wrap: anywhere; }
-  .highlightExplorerLayout { padding: 12px; border-radius: 16px; }
+  .highlightExplorerLayout { padding: 10px; border-radius: 16px; }
+  .highlightExplorerLayout, .highlightListPanel, .timelinePanel, .timelineGraph, .chapterStrip { min-width: 0; }
+  .highlightExplorerLayout > .highlightListPanel { order: -1; }
+  .highlightControls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .highlightControl:first-child { grid-column: 1 / -1; }
+  .highlightControl { min-width: 0; }
+  .archiveDetailPlayer { border-radius: 12px; box-shadow: 4px 4px 0 rgba(32, 32, 42, .12); }
   .highlightListHeader, .highlightHeaderActions { gap: 10px; }
   .highlightListHeader { flex-direction: column; }
   .highlightHeaderActions { justify-content: flex-start; }
@@ -108,12 +165,13 @@
   .highlightControl select { min-width: 0; min-height: 48px; font-size: 16px; }
   .chapterTrack { height: 48px; }
   .chapterStripTop, .timelineGraphTop { flex-wrap: wrap; gap: 8px; }
-  .timelineTooltip { overflow-wrap: anywhere; }
+  .timelineTooltip { overflow-wrap: anywhere; white-space: normal; text-align: left; }
+  .timelineLens:not(.isActive) { display: none; }
   .timelineGraph > svg { touch-action: pan-y; }
   .selectedMomentSummary { flex-wrap: wrap; }
   .momentList { gap: 10px; }
   .momentCard { gap: 8px; padding: 10px; border-radius: 14px; box-shadow: 4px 4px 0 rgba(32, 32, 42, .1); }
-  .momentCard.hasThumbnail { grid-template-columns: 104px minmax(0, 1fr); }
+  .momentCard.hasThumbnail { grid-template-columns: minmax(0, 1fr); }
   .momentThumbnail { border-radius: 10px; }
   .momentCardBody { gap: 8px; }
   .momentCardTop { gap: 8px; }
@@ -122,7 +180,7 @@
   .momentSignal { grid-template-columns: minmax(84px, auto) minmax(0, 1fr); gap: 6px; font-size: 12px; }
   .starRating { font-size: 15px; }
   .momentCardActions { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
-  .watchMomentButton, .shareMomentButton { min-height: 40px; font-size: 13px; }
+  .watchMomentButton, .shareMomentButton { min-height: 44px; font-size: 13px; }
   .watchMomentButton { width: 100%; }
   .shareMomentButton { width: auto; min-width: 72px; }
 }

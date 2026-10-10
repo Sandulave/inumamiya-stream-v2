@@ -515,6 +515,8 @@ export default function HighlightsExplorer({
   }, [isInfoOpen]);
 
   useEffect(() => {
+    // The mobile page scrolls to the video after a selection, not the card.
+    if (window.matchMedia('(max-width: 767px)').matches) return;
     selectedCardRef.current?.scrollIntoView({
       block: 'nearest',
       behavior: 'smooth',
@@ -584,7 +586,7 @@ export default function HighlightsExplorer({
             <span className="selectedMomentBadge">選択中</span>
             <div>
               <p>{selectedMoment.timestamp}</p>
-              <span>見どころの少し前へ移動しました。再生はプレイヤーの▶から始められます</span>
+              <span>見どころの5秒前から再生します。始まらない場合はプレイヤーの▶を押してください</span>
             </div>
           </div>
         ) : null}
@@ -781,7 +783,14 @@ export default function HighlightsExplorer({
                   <div className="momentCardBody">
                     <div className="momentCardTop">
                       <div>
-                        <p className="momentTimestamp">{moment.timestamp}</p>
+                        <button
+                          type="button"
+                          className="momentTimestamp momentTimestampButton"
+                          aria-label={`${moment.timestamp}から再生`}
+                          onClick={() => onSeek(moment.timestampSeconds)}
+                        >
+                          {moment.timestamp}
+                        </button>
                       </div>
                       {isSelected ? (
                         <span className="momentSelectedText">選択中</span>
