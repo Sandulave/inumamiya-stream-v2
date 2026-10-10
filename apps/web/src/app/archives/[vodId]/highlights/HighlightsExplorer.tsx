@@ -94,11 +94,12 @@ function formatChapterDuration(seconds: number) {
 }
 
 function resolveThumbnailUrl(thumbnailUrl: string) {
-  if (/^https?:\/\//.test(thumbnailUrl)) {
-    return thumbnailUrl;
-  }
-
-  return thumbnailUrl;
+  // Stored analysis may contain an absolute URL for an older frontend host.
+  // Serve our generated thumbnails through this deployment's API proxy.
+  const generatedThumbnail = thumbnailUrl.match(
+    /^(?:https?:\/\/[^/]+)?(\/highlights\/vods\/\d+\/thumbnails\/\d+)(?:\?.*)?$/,
+  );
+  return generatedThumbnail?.[1] ?? thumbnailUrl;
 }
 
 function buildAreaPath(
